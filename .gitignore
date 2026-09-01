@@ -1,0 +1,17 @@
+# 依赖与本地环境
+node_modules/
+.venv/
+tools/
+
+# 运行产物
+logs/
+backups/
+output/
+not-quite-dead-web/
+
+# TikTok 本地采集的临时产物（YouTube 链路不依赖）
+scripts/_debug*.mjs
+*.log
+
+# 系统文件
+.DS_Store

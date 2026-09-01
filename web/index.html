@@ -1,0 +1,1252 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>YouTube 数据看板</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0e1014;
+    --panel: #161920;
+    --panel2: #1c202a;
+    --border: #262b36;
+    --text: #e8eaf0;
+    --muted: #8b93a7;
+    --accent: #4f8cff;
+    --green: #34d399;
+    --amber: #f59e0b;
+    --purple: #a78bfa;
+    --up: #34d399;
+    --down: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "PingFang SC", "Segoe UI", Roboto, sans-serif;
+    font-size: 14px; line-height: 1.5;
+  }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 20px 24px 48px; }
+
+  /* ---------- 顶栏 ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(14,16,20,.82); backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar-inner { max-width: 1240px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .topbar h1 { font-size: 17px; margin: 0 auto 0 0; white-space: nowrap; }
+  .tb-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .tb-spacer { flex: 1; }
+  .seg { display: flex; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 3px; gap: 2px; }
+  .seg button { border: none; background: transparent; color: var(--muted); padding: 5px 10px; border-radius: 6px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+  .seg button.active { background: var(--accent); color: #fff; }
+  .menu-wrap { position: relative; }
+  .menu-pop {
+    display: none; position: absolute; right: 0; top: calc(100% + 6px);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 6px; min-width: 190px; z-index: 200; box-shadow: 0 10px 30px rgba(0,0,0,.45);
+  }
+  .menu-wrap.open .menu-pop { display: block; }
+  .menu-pop button {
+    display: block; width: 100%; text-align: left; background: none; border: none;
+    color: var(--text); padding: 9px 12px; border-radius: 7px; cursor: pointer; font-size: 13.5px;
+  }
+  .menu-pop button:hover { background: var(--panel2); }
+  .menu-pop button.danger { color: var(--down); }
+  .add-row {
+    display: none; gap: 8px; padding: 10px 24px; align-items: center; flex-wrap: wrap;
+    justify-content: center;
+    border-top: 1px solid var(--border); background: var(--panel);
+  }
+  .add-row.open { display: flex; }
+  select, input[type="search"] {
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 11px; font-size: 13.5px; max-width: 100%;
+  }
+  .btn {
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 7px 14px; font-size: 13.5px; cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { filter: brightness(1.1); }
+  .btn.ghost { background: var(--panel2); border: 1px solid var(--border); color: var(--text); }
+  .btn.danger { background: rgba(248,113,113,.12); border: 1px solid rgba(248,113,113,.35); color: var(--down); }
+  .manage { display: none; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .manage label { display: flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+
+  /* ---------- 区块标题 ---------- */
+  section { margin-top: 28px; }
+  .sec-title {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--muted); margin: 0 0 12px;
+    letter-spacing: .5px;
+  }
+  .sec-title::before { content: ""; width: 3px; height: 13px; background: var(--accent); border-radius: 2px; }
+  .sec-title .en { font-size: 11px; opacity: .55; text-transform: uppercase; letter-spacing: 1px; }
+
+  /* ---------- 频道档案卡 ---------- */
+  .profile {
+    background: linear-gradient(135deg, var(--panel) 0%, var(--panel2) 100%);
+    border: 1px solid var(--border); border-radius: 14px; padding: 18px;
+    display: flex; gap: 18px; flex-wrap: wrap;
+  }
+  .profile .who { display: flex; gap: 14px; min-width: 260px; flex: 1; }
+  .profile img.avatar { width: 68px; height: 68px; border-radius: 50%; border: 2px solid var(--border); object-fit: cover; }
+  .profile .name { font-size: 18px; font-weight: 700; }
+  .profile .handle { color: var(--accent); font-size: 13px; text-decoration: none; }
+  .profile .handle:hover { text-decoration: underline; }
+  .profile .desc { color: var(--muted); font-size: 13px; margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 640px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; align-content: flex-start; }
+  .chip {
+    font-size: 12px; padding: 3px 10px; border-radius: 999px;
+    background: var(--panel2); border: 1px solid var(--border); color: var(--muted);
+  }
+  a.chip { color: var(--accent); text-decoration: none; }
+  a.chip:hover { border-color: var(--accent); }
+  .chip.kw { color: var(--text); background: rgba(79,140,255,.09); }
+  .orig-name { color: var(--muted); font-size: 13px; font-weight: 400; margin-left: 8px; }
+  .meta-edit { flex-basis: 100%; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+  .meta-edit input { background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 7px; padding: 6px 10px; font-size: 13px; }
+  .facts { min-width: 220px; display: grid; grid-template-columns: 1fr; gap: 6px; font-size: 12.5px; color: var(--muted); align-content: start; }
+  .facts b { color: var(--text); font-weight: 600; }
+  .facts .cid { font-family: ui-monospace, monospace; font-size: 11px; word-break: break-all; opacity: .7; }
+
+  /* ---------- KPI 卡 ---------- */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 12px; }
+  .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  .kpi .label { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kpi .value { font-size: 22px; font-weight: 700; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .value-row { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+  .vbadge { flex-shrink: 0; display: inline-flex; }
+  .kpi .kv { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .kpi .kv span { color: var(--muted); font-size: 12px; font-weight: 400; }
+  .kv-right { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .kv-right b { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .kpi .sub { color: var(--muted); font-size: 11.5px; margin-top: auto; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; min-height: 18px; }
+  .badge { display: inline-block; margin-left: 6px; font-size: 11.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; vertical-align: 2px; }
+  .badge.up { color: var(--up); background: rgba(52,211,153,.12); }
+  .badge.down { color: var(--down); background: rgba(248,113,113,.12); }
+
+  /* ---------- 图表 ---------- */
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .grid-2 { grid-template-columns: repeat(2, 1fr); }
+  @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .card > h3 { font-size: 12.5px; color: var(--muted); margin: 0 0 10px; font-weight: 500; }
+  .card.wide { grid-column: 1 / -1; }
+  .chart-wrap { position: relative; height: 250px; }
+  .chart-wrap.tall { height: 300px; }
+  .picker-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+
+  /* ---------- 表格 ---------- */
+  .table-card { padding: 0; overflow: auto; max-height: 70vh; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--muted); font-size: 12px; cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--panel); z-index: 1; }
+  th:hover { color: var(--text); }
+  th.num, td.num { text-align: right; }
+  td.num { font-variant-numeric: tabular-nums; }
+  th .arrow { font-size: 9px; margin-left: 3px; }
+  .vtitle { display: flex; gap: 10px; align-items: center; max-width: 360px; }
+  .vtitle img { width: 62px; height: 35px; object-fit: cover; border-radius: 5px; flex-shrink: 0; background: #222; }
+  .vtitle span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vtitle a { color: var(--text); text-decoration: none; }
+  .vtitle a:hover { color: var(--accent); }
+  tr:hover td { background: rgba(79,140,255,.05); }
+  .empty-note {
+    position: absolute; inset: 0; z-index: 2;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 13px; background: var(--panel);
+  }
+  .pill { font-size: 10.5px; padding: 1px 7px; border-radius: 999px; margin-left: 6px; vertical-align: 1px; }
+  .pill.short { color: #f472b6; background: rgba(244,114,182,.13); }
+  .pill.video { color: #60a5fa; background: rgba(96,165,250,.13); }
+  .pill.member { color: var(--amber); background: rgba(245,158,11,.14); cursor: help; }
+  .hint { color: var(--muted); font-size: 12px; }
+
+  footer { color: var(--muted); font-size: 12px; margin-top: 32px; line-height: 1.7; }
+  #error { display: none; background: #2a1215; border: 1px solid #7f1d1d; color: #fca5a5; border-radius: 10px; padding: 14px 16px; margin: 16px 0; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <h1>📊 YouTube 数据看板</h1>
+
+    <!-- ① 上下文：我在看什么 -->
+    <select id="group-filter" style="max-width:110px" title="按分组筛选"></select>
+    <select id="tag-filter" style="max-width:110px" title="按标签筛选"></select>
+    <select id="channel" style="max-width:200px" title="切换账号"></select>
+
+    <!-- ② 时间范围 -->
+    <div class="seg" id="range-seg" title="时间范围">
+      <button data-days="7" class="active">7天</button>
+      <button data-days="28">28天</button>
+      <button data-days="90">90天</button>
+      <button data-days="0">终身</button>
+    </div>
+
+    <div class="tb-spacer"></div>
+
+    <!-- ③ 操作区 -->
+    <button class="btn ghost" id="refresh-btn" title="重新抓取当前账号数据" style="${staticMode ? 'display:none' : ''}">⟳ 刷新</button>
+    <button class="btn ghost" id="export" title="导出当前明细为 CSV">⬇ CSV</button>
+    <div class="menu-wrap" id="manage-menu" style="display:none">
+      <button class="btn ghost" id="manage-btn" title="账号管理">⋯</button>
+      <div class="menu-pop">
+        <button id="menu-add">➕ 添加账号</button>
+        <button id="menu-del" class="danger">🗑 删除当前账号</button>
+      </div>
+    </div>
+    <span class="hint" id="updated-at"></span>
+  </div>
+
+  <!-- 添加账号表单（按需展开） -->
+  <div class="add-row" id="add-row">
+    <select id="new-platform">
+      <option value="youtube">YouTube</option>
+      <option value="tiktok">TikTok</option>
+    </select>
+    <input id="new-handle" placeholder="@handle / 链接 / UC-ID" style="width:180px" />
+    <input id="new-alias" placeholder="备注名(可选)" style="width:110px" />
+    <input id="new-group" placeholder="分组(可选)" style="width:90px" />
+    <input id="new-tags" placeholder="标签,逗号分隔" style="width:110px" />
+    <label><input type="checkbox" id="all-videos" />全量抓取</label>
+    <button class="btn" id="add-btn">开始抓取</button>
+    <button class="btn ghost" id="add-cancel">取消</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <div id="error"></div>
+
+  <!-- ① 频道档案 -->
+  <section>
+    <div class="sec-title">频道档案 <span class="en">Profile</span></div>
+    <div class="profile">
+      <div class="who">
+        <img class="avatar" id="p-avatar" alt="" />
+        <div style="min-width:0">
+          <span class="name" id="p-name"></span>
+          <a class="handle" id="p-handle" target="_blank" rel="noopener"></a>
+          <div class="desc" id="p-desc"></div>
+        </div>
+      </div>
+      <div class="facts" id="p-facts"></div>
+      <div style="flex-basis:100%">
+        <div class="chips" id="p-links"></div>
+        <div class="chips" id="p-keywords"></div>
+        <div class="meta-edit" id="meta-edit" style="display:none">
+          <span class="hint">备注名</span><input id="edit-alias" style="width:130px" placeholder="留空清除" />
+          <span class="hint">分组</span><input id="edit-group" style="width:100px" placeholder="留空清除" />
+          <span class="hint">标签</span><input id="edit-tags" style="width:140px" placeholder="逗号分隔,留空清除" />
+          <button class="btn" id="meta-save">保存</button>
+          <button class="btn ghost" id="meta-cancel">取消</button>
+        </div>
+        <div class="chips" id="p-editbtn" style="display:none"><button class="btn ghost" id="meta-editbtn" style="padding:4px 12px;font-size:12.5px">✏️ 编辑备注/分组</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ② 核心指标 -->
+  <section>
+    <div class="sec-title">核心指标 <span class="en">Key Metrics</span></div>
+    <div class="kpis">
+      <div class="kpi">
+        <div class="label" id="k-subs-label">订阅数（近似）</div>
+        <div class="value-row"><span class="value" id="k-subs">–</span><span class="vbadge" id="k-subs-badge"></span></div>
+        <div class="sub" id="k-subs-delta"></div>
+      </div>
+      <div class="kpi">
+        <div class="label" id="k-tviews-label">频道总播放量</div>
+        <div class="value-row"><span class="value" id="k-tviews">–</span><span class="vbadge" id="k-tviews-badge"></span></div>
+        <div class="sub" id="k-tviews-delta"></div>
+      </div>
+      <div class="kpi">
+        <div class="label">跟踪视频总播放</div>
+        <div class="value-row"><span class="value" id="k-sum">–</span><span class="vbadge" id="k-sum-badge"></span></div>
+        <div class="sub" id="k-sum-sub"></div>
+      </div>
+      <div class="kpi">
+        <div class="label">平均 / 中位数播放</div>
+        <div class="kv"><span>平均</span><span class="kv-right"><b id="k-avg">–</b><span class="vbadge" id="k-avg-badge"></span></span></div>
+        <div class="kv"><span>中位数</span><span class="kv-right"><b id="k-med">–</b><span class="vbadge" id="k-med-badge"></span></span></div>
+        <div class="sub" id="k-avgmed-sub">跟踪范围内</div>
+      </div>
+      <div class="kpi">
+        <div class="label">总点赞 · 平均赞播比</div>
+        <div class="value-row"><span class="value" id="k-like">–</span><span class="vbadge" id="k-like-badge"></span></div>
+        <div class="sub" id="k-eng"></div>
+      </div>
+      <div class="kpi">
+        <div class="label">最高播放视频</div>
+        <div class="value-row"><span class="value" id="k-top" title="">–</span></div>
+        <div class="sub" id="k-top-sub"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ③ 增长趋势 -->
+  <section>
+    <div class="sec-title">增长趋势 <span class="en">Growth</span></div>
+    <div class="grid">
+      <div class="card wide">
+        <h3>订阅数 & 频道总播放量（每日快照）<span class="hint" id="growth-meta"></span></h3>
+        <div class="chart-wrap tall"><canvas id="c-growth"></canvas></div>
+      </div>
+      <div class="card wide">
+        <h3>单视频播放量走势</h3>
+        <div class="picker-row"><select id="video-pick" style="max-width:min(420px,90%)"></select></div>
+        <div class="chart-wrap"><canvas id="c-video"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="card" id="tiktok-note" style="display:none; border-color:rgba(245,158,11,.4)">
+    <span class="hint">⚠️ TikTok 平台反爬限制：本次快照未能获取视频级数据（可点"⟳ 刷新当前"用本地浏览器重试），账号级增长数据不受影响。</span>
+  </div>
+
+  <div id="video-sections">
+  <!-- ④ 表现分析 -->
+  <section>
+    <div class="sec-title">表现分析 <span class="en">Performance</span></div>
+    <div class="grid grid-2">
+      <div class="card wide"><h3>播放量 Top 10（最新快照）</h3><div class="chart-wrap"><canvas id="c-top"></canvas></div></div>
+      <div class="card"><h3>互动率 Top 10（点赞 ÷ 播放）</h3><div class="chart-wrap"><canvas id="c-engage"></canvas></div></div>
+      <div class="card"><h3>播放量分布（跟踪范围内）</h3><div class="chart-wrap"><canvas id="c-dist"></canvas></div></div>
+    </div>
+  </section>
+
+  <!-- ⑤ 发布习惯 -->
+  <section>
+    <div class="sec-title">发布习惯 <span class="en">Publishing Habits</span></div>
+    <div class="grid grid-2">
+      <div class="card"><h3>按星期分布</h3><div class="chart-wrap"><canvas id="c-weekday"></canvas></div></div>
+      <div class="card"><h3>月度发布节奏（最近 12 个月）</h3><div class="chart-wrap"><canvas id="c-cadence"></canvas></div></div>
+      <div class="card wide"><h3>按小时分布（0–23 时 · 本地时区 · 需精确发布时间）</h3><div class="chart-wrap"><canvas id="c-hour"></canvas><div class="empty-note" id="e-hour" style="display:none">暂无精确发布时间数据</div></div></div>
+    </div>
+  </section>
+
+  <!-- ⑥ 内容特征 -->
+  <section>
+    <div class="sec-title">内容特征 <span class="en">Content Traits</span></div>
+    <div class="grid">
+      <div class="card"><h3>标题话题标签 Top 10（#hashtag）</h3><div class="chart-wrap"><canvas id="c-tags"></canvas><div class="empty-note" id="e-tags" style="display:none">标题中没有话题标签</div></div></div>
+      <div class="card"><h3>视频类型构成（占比）</h3><div class="chart-wrap"><canvas id="c-type"></canvas></div></div>
+    </div>
+  </section>
+
+  <!-- ⑦ 视频明细 -->
+  <section>
+    <div class="sec-title">视频明细 <span class="en">All Videos</span></div>
+    <div class="picker-row">
+      <input type="search" id="search" placeholder="搜索标题…" style="width:240px" />
+      <span class="hint">点击表头排序 · 增量按所选时间范围计算（<b id="range-hint">近7天</b> · <span id="range-count"></span>）</span>
+    </div>
+    <div class="card table-card">
+      <table>
+        <thead>
+          <tr>
+            <th data-k="idx">#</th>
+            <th data-k="title">标题</th>
+            <th data-k="type">类型</th>
+            <th data-k="published">发布时间</th>
+            <th data-k="durationSec" class="num">时长</th>
+            <th data-k="views" class="num">播放</th>
+            <th data-k="viewsDelta" class="num">增量</th>
+            <th data-k="likes" class="num">点赞</th>
+            <th data-k="comments" class="num">评论</th>
+            <th data-k="shares" class="num">分享</th>
+            <th data-k="engagement" class="num">赞播比</th>
+            <th data-k="descriptionChars" class="num">简介字数</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+  </div><!-- /video-sections -->
+
+  <footer>
+    数据来自 YouTube 公开页面每日快照（无 API Key）· 订阅数为页面缩写值，总播放/点赞为精确值<br/>
+    精确发布时间来自频道 RSS（仅覆盖最近 15 个视频）· Shorts 视频的时长与简介长度页面不提供
+  </footer>
+</div>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const compact = new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 });
+const full = new Intl.NumberFormat("zh-CN");
+
+const fmtC = (v) => (v == null ? "–" : compact.format(v));
+const fmtF = (v) => (v == null ? "–" : full.format(v));
+const fmtDur = (s) => {
+  if (s == null) return "–";
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = String(s % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+};
+const fmtDT = (r) => {
+  if (!r.publishedFull) return r.published ? r.published.replaceAll("-", "/") : "–";
+  const d = new Date(r.publishedFull);
+  return `${String(d.getMonth() + 1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+};
+const badge = (v) =>
+  v == null ? "" :
+  `<span class="badge ${v >= 0 ? "up" : "down"}">${v >= 0 ? "+" : ""}${compact.format(v)}</span>`;
+const hashtags = (t) => String(t).match(/#[\w\u4e00-\u9fa5]+/g) ?? [];
+
+// ---------- 加载（多平台合并） ----------
+const channels = {}; // "platform:handle" -> {platform, handle, info, records}
+let latestUpdated = 0;
+for (const [platform, file] of [["youtube", "youtube-history"], ["tiktok", "tiktok-history"]]) {
+  try {
+    const res = await fetch(`/data/${file}.json?t=${Date.now()}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const h = await res.json();
+    latestUpdated = Math.max(latestUpdated, Date.parse(h.updatedAt) || 0);
+    for (const [handle, ch] of Object.entries(h.channels ?? {})) {
+      channels[`${platform}:${handle}`] = { platform, handle, ...ch };
+    }
+  } catch {
+  }
+}
+const channelKeys = Object.keys(channels);
+if (!channelKeys.length) {
+  $("error").style.display = "block";
+  $("error").textContent = staticMode
+    ? "暂无任何频道数据。请在仓库中触发 GitHub Actions 运行采集脚本。"
+    : "暂无任何频道数据。请先运行采集脚本，或在本地服务模式下添加账号。";
+  throw new Error("no channels");
+}
+$("updated-at").textContent = `更新于 ${new Date(latestUpdated).toLocaleString("zh-CN")}`;
+
+// ---------- 时间范围 ----------
+let rangeDays = 7; // 7 / 28 / 90 / 0(终身)
+function recordsInRange(records) {
+  if (!rangeDays || records.length <= 1) return records;
+  const latest = records[records.length - 1];
+  const cutoff = new Date(latest.date);
+  cutoff.setDate(cutoff.getDate() - rangeDays);
+  const inRange = records.filter((r) => new Date(r.date) >= cutoff);
+  // 携带 cutoff 前最近一条作为对比基线
+  const before = records.filter((r) => new Date(r.date) < cutoff);
+  const base = before[before.length - 1];
+  return base ? [base, ...inRange] : inRange;
+}
+const rangeLabel = () => (rangeDays ? `近${rangeDays}天` : "终身");
+document.querySelectorAll("#range-seg button").forEach((b) => {
+  b.onclick = () => {
+    rangeDays = Number(b.dataset.days);
+    document.querySelectorAll("#range-seg button").forEach((x) => x.classList.toggle("active", x === b));
+    const hint = $("range-hint");
+    if (hint) hint.textContent = rangeLabel();
+    if (currentKey) renderChannel(currentKey);
+  };
+});
+
+// ---------- 账号管理（仅本地服务模式下可用） ----------
+let apiOk = false;
+let staticMode = false;
+try {
+  apiOk = (await fetch("/api/health")).ok;
+} catch {}
+staticMode = !apiOk;
+if (apiOk) {
+  $("manage-menu").style.display = "block";
+} else {
+  // 静态托管（如 GitHub Pages）：隐藏管理入口，显示静态模式提示
+  const banner = document.createElement("div");
+  banner.id = "static-banner";
+  banner.textContent = "📡 静态模式 · 数据由 GitHub Actions 每日自动更新";
+  $("topbar").prepend(banner);
+}
+if (staticMode) {
+  $("manage-menu").style.display = "none";
+}
+// 静态模式：加载 /channels.json 补充 alias/group/tags
+if (staticMode) {
+  try {
+    const cfg = await fetch("/channels.json").then(r => r.json());
+    for (const c of cfg) {
+      const key = `${c.platform ?? "youtube"}:${c.handle}`;
+      if (channels[key] && c.alias) channels[key].info.alias = c.alias;
+      if (channels[key] && c.group) channels[key].info.group = c.group;
+      if (channels[key] && Array.isArray(c.tags)) channels[key].info.tags = c.tags;
+    }
+  } catch {}
+}
+
+// ⋯ 菜单开关与点击外部关闭
+$("manage-btn").onclick = (e) => {
+  e.stopPropagation();
+  $("manage-menu").classList.toggle("open");
+};
+document.addEventListener("click", (e) => {
+  if (!$("manage-menu").contains(e.target)) $("manage-menu").classList.remove("open");
+});
+
+$("menu-add").onclick = () => {
+  $("manage-menu").classList.remove("open");
+  const row = $("add-row");
+  row.classList.toggle("open");
+  if (row.classList.contains("open")) $("new-handle").focus();
+};
+$("add-cancel").onclick = () => $("add-row").classList.remove("open");
+
+$("add-btn").onclick = async () => {
+  if (staticMode) return;
+  const handle = $("new-handle").value.trim();
+  const platform = $("new-platform").value;
+  const all = $("all-videos").checked;
+  const alias = $("new-alias").value.trim();
+  const group = $("new-group").value.trim();
+  const tags = [...new Set($("new-tags").value.split(/[,，、\s]+/).map((s) => s.trim()).filter(Boolean))];
+  if (!handle) return;
+  const btn = $("add-btn");
+  btn.disabled = true;
+  btn.textContent = all ? "全量抓取中…" : "抓取中…";
+  try {
+    const res = await fetch("/api/channels", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ handle, platform, all, alias, group, tags }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(`添加失败：${j.error ?? `HTTP ${res.status}`}`);
+    } else {
+      location.reload();
+    }
+  } catch (e) {
+    alert(`请求失败：${e.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "开始抓取";
+  }
+};
+
+// ---------- 备注名/分组编辑 ----------
+$("meta-editbtn").onclick = () => {
+  const info = channels[currentKey]?.info ?? {};
+  $("edit-alias").value = info.alias ?? "";
+  $("edit-group").value = info.group ?? "";
+  $("edit-tags").value = (info.tags ?? []).join(", ");
+  $("meta-edit").style.display = "flex";
+  $("p-editbtn").style.display = "none";
+};
+$("meta-cancel").onclick = () => {
+  $("meta-edit").style.display = "none";
+  $("p-editbtn").style.display = apiOk ? "flex" : "none";
+};
+$("meta-save").onclick = async () => {
+  if (staticMode) return;
+  const [platform, ...rest] = currentKey.split(":");
+  const handle = rest.join(":");
+  const tags = [...new Set($("edit-tags").value.split(/[,，、\s]+/).map((s) => s.trim()).filter(Boolean))].slice(0, 10);
+  try {
+    const res = await fetch("/api/channel-meta", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ platform, handle, alias: $("edit-alias").value, group: $("edit-group").value, tags }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(`保存失败：${j.error ?? `HTTP ${res.status}`}`);
+      return;
+    }
+    const info = channels[currentKey].info ?? (channels[currentKey].info = {});
+    if (j.alias) info.alias = j.alias; else delete info.alias;
+    if (j.group) info.group = j.group; else delete info.group;
+    if (j.tags?.length) info.tags = j.tags; else delete info.tags;
+    $("meta-edit").style.display = "none";
+    $("p-editbtn").style.display = "flex";
+    buildGroupFilter(currentGroupFilter());
+    buildTagFilter(currentTagFilter());
+    rebuildChannelSelect(currentKey);
+    renderChannel(currentKey);
+  } catch (e) {
+    alert(`请求失败：${e.message}`);
+  }
+};
+
+$("refresh-btn").onclick = async () => {
+  if (staticMode) return;
+  const btn = $("refresh-btn");
+  if (!currentKey) return;
+  const [platform, ...rest] = currentKey.split(":");
+  const handle = rest.join(":");
+  btn.disabled = true;
+  btn.textContent = "⟳ 抓取中…（全量账号约需1-2分钟）";
+  try {
+    const res = await fetch("/api/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ handle, platform }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(`刷新失败：${j.error ?? `HTTP ${res.status}`}`);
+    } else {
+      location.reload();
+    }
+  } catch (e) {
+    alert(`请求失败：${e.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "⟳ 刷新当前";
+  }
+};
+
+$("menu-del").onclick = async () => {
+  if (staticMode) return;
+  $("manage-menu").classList.remove("open");
+  if (!currentKey) return;
+  const [platform, ...rest] = currentKey.split(":");
+  const handle = rest.join(":");
+  if (!confirm(`确定删除 ${currentKey} ？\n将同时删除其全部历史快照数据。`)) return;
+  try {
+    const res = await fetch(`/api/channels/${platform}/${encodeURIComponent(handle)}`, { method: "DELETE" });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      alert(`删除失败：${j.error ?? res.status}`);
+      return;
+    }
+    location.reload();
+  } catch (e) {
+    alert(`请求失败：${e.message}`);
+  }
+};
+
+for (const key of channelKeys) {
+  const ch = channels[key];
+  const o = document.createElement("option");
+  o.value = key;
+  o.textContent = `${ch.platform === "youtube" ? "[YT]" : "[TT]"} ${ch.info?.alias || ch.info?.name || ch.handle}`;
+  o.dataset.group = ch.info?.group || "";
+  o.dataset.name = ch.info?.alias || ch.info?.name || ch.handle;
+  $("channel").appendChild(o);
+}
+
+// ---------- 分组/标签筛选 ----------
+function buildGroupFilter(selected) {
+  const sel = $("group-filter");
+  const groups = new Set();
+  let hasUngrouped = false;
+  for (const key of channelKeys) {
+    const g = channels[key].info?.group || "";
+    if (g) groups.add(g);
+    else hasUngrouped = true;
+  }
+  sel.innerHTML = "";
+  const add = (v, label) => {
+    const o = document.createElement("option");
+    o.value = v;
+    o.textContent = label;
+    sel.appendChild(o);
+  };
+  add("__all__", "全部分组");
+  for (const g of [...groups].sort((a, b) => a.localeCompare(b, "zh"))) add(g, `📁 ${g}`);
+  if (hasUngrouped) add("__ungrouped__", "未分组");
+  if (selected && [...sel.options].some((o) => o.value === selected)) sel.value = selected;
+}
+
+function buildTagFilter(selected) {
+  const sel = $("tag-filter");
+  const tags = new Set();
+  let hasUntagged = false;
+  for (const key of channelKeys) {
+    const t = channels[key].info?.tags ?? [];
+    if (t.length) for (const x of t) tags.add(x);
+    else hasUntagged = true;
+  }
+  sel.innerHTML = "";
+  const add = (v, label) => {
+    const o = document.createElement("option");
+    o.value = v;
+    o.textContent = label;
+    sel.appendChild(o);
+  };
+  add("__all__", "全部标签");
+  for (const t of [...tags].sort((a, b) => a.localeCompare(b, "zh"))) add(t, `#${t}`);
+  if (hasUntagged) add("__untagged__", "无标签");
+  if (selected && [...sel.options].some((o) => o.value === selected)) sel.value = selected;
+}
+
+const currentGroupFilter = () => $("group-filter").value;
+const matchesGroupFilter = (key) => {
+  const f = currentGroupFilter();
+  if (f === "__all__") return true;
+  const g = channels[key].info?.group || "";
+  return f === "__ungrouped__" ? !g : g === f;
+};
+const currentTagFilter = () => $("tag-filter").value;
+const matchesTagFilter = (key) => {
+  const f = currentTagFilter();
+  if (f === "__all__") return true;
+  const t = channels[key].info?.tags ?? [];
+  return f === "__untagged__" ? t.length === 0 : t.includes(f);
+};
+
+// 按分组折叠渲染下拉框（筛选生效时为平铺列表）
+function rebuildChannelSelect(selectedKey) {
+  const sel = $("channel");
+  const prev = selectedKey ?? sel.value;
+  const byKey = Object.fromEntries([...sel.querySelectorAll("option")].map((o) => [o.value, o]));
+  sel.innerHTML = "";
+  const visible = channelKeys.filter((k) => matchesGroupFilter(k) && matchesTagFilter(k));
+  const showGroups = currentGroupFilter() === "__all__";
+  const groups = new Map();
+  for (const key of visible) {
+    const g = showGroups ? channels[key].info?.group || "" : "";
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(key);
+  }
+  const ordered = ["", ...[...groups.keys()].filter((g) => g).sort((a, b) => a.localeCompare(b, "zh"))];
+  for (const g of ordered) {
+    const keys = groups.get(g) ?? [];
+    if (!keys.length) continue;
+    let container = sel;
+    if (g) {
+      container = document.createElement("optgroup");
+      container.label = g;
+    }
+    for (const k of keys) {
+      if (byKey[k]) container.appendChild(byKey[k]);
+    }
+    if (container !== sel && container.children.length) sel.appendChild(container);
+  }
+  const fallback = visible.includes(prev) ? prev : visible[0];
+  if (fallback && byKey[fallback]) sel.value = fallback;
+  return visible;
+}
+
+const onFilterChange = () => {
+  const visible = rebuildChannelSelect();
+  const cur = $("channel").value;
+  if (!visible.includes(cur) && visible.length) renderChannel(visible[0]);
+};
+$("group-filter").onchange = onFilterChange;
+$("tag-filter").onchange = onFilterChange;
+
+// ---------- 图表工具 ----------
+const AXIS = { ticks: { color: "#8b93a7" }, grid: { color: "#222735" } };
+function makeChart(id, cfg) {
+  Chart.getChart(id)?.destroy();
+  return new Chart($(id), cfg);
+}
+function hbar(id, labels, data, color, fmtX, tipExtra) {
+  makeChart(id, {
+    type: "bar",
+    data: { labels, datasets: [{ data, backgroundColor: color + "cc", borderRadius: 5 }] },
+    options: {
+      indexAxis: "y", responsive: true, maintainAspectRatio: false,
+      interaction: { mode: "nearest", axis: "y" },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (c) => fmtX(c.parsed.x),
+            afterBody: (items) => (tipExtra ? tipExtra(items[0].dataIndex) : []),
+          },
+        },
+      },
+      scales: {
+        x: { ...AXIS, ticks: { ...AXIS.ticks, callback: (v) => compact.format(v) } },
+        y: { ticks: { color: "#c3cad9", font: { size: 11 } }, grid: { display: false } },
+      },
+    },
+  });
+}
+function vbar(id, labels, data, color, xTickOpts = {}) {
+  makeChart(id, {
+    type: "bar",
+    data: { labels, datasets: [{ data, backgroundColor: color + "cc", borderRadius: 5 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ...AXIS, grid: { display: false }, ticks: { ...AXIS.ticks, autoSkip: false, maxRotation: 0, ...xTickOpts } },
+        y: { ...AXIS, ticks: { ...AXIS.ticks, precision: 0 } },
+      },
+    },
+  });
+}
+
+// ---------- 行模型 ----------
+function buildRows(records) {
+  const latest = records[records.length - 1];
+  // 对比基线 = 范围内最早一条（recordsInRange 已保证首条为基线）
+  const prev = records.length > 1 ? records[0] : null;
+  return Object.entries(latest.videos ?? {}).map(([id, v]) => {
+    const pv = prev?.videos?.[id]?.views;
+    return {
+      id,
+      title: v.title ?? "",
+      published: v.published,
+      publishedFull: v.publishedFull,
+      durationSec: v.durationSec,
+      views: v.views,
+      likes: v.likes,
+      comments: v.comments,
+      shares: v.shares,
+      descriptionChars: v.descriptionChars,
+      shorts: !!v.shorts,
+      membersOnly: !!v.membersOnly,
+      viewsDelta: pv != null && v.views != null ? v.views - pv : null,
+      engagement: v.likes != null && v.views ? (v.likes / v.views) * 100 : null,
+      url: `https://youtu.be/${id}`,
+      thumb: `https://i.ytimg.com/vi/${id}/mqdefault.jpg`,
+    };
+  });
+}
+const median = (arr) => {
+  if (!arr.length) return null;
+  const s = [...arr].sort((a, b) => a - b), i = Math.floor(s.length / 2);
+  return s.length % 2 ? s[i] : Math.round((s[i - 1] + s[i]) / 2);
+};
+
+// ---------- ① 档案 ----------
+const AVATAR_PLACEHOLDER =
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="68" height="68"><rect width="100%" height="100%" fill="#262b36"/><circle cx="34" cy="26" r="10" fill="#8b93a7"/><path d="M14 58c2-12 9-18 20-18s18 6 20 18z" fill="#8b93a7"/></svg>'
+  );
+function renderProfile(platform, info, latest) {
+  const img = $("p-avatar");
+  img.onerror = () => {
+    img.onerror = null;
+    img.src = AVATAR_PLACEHOLDER;
+  };
+  img.src = info.avatar || AVATAR_PLACEHOLDER;
+  const ptag = platform === "youtube"
+    ? '<span class="pill video">YouTube</span>'
+    : '<span class="pill short">TikTok</span>';
+  const displayName = info.alias || info.name || "?";
+  const origName = info.alias && info.name && info.alias !== info.name
+    ? `<span class="orig-name">${info.name}</span>` : "";
+  $("p-name").innerHTML = `${displayName} ${ptag}${info.verified ? ' <span class="pill member">✔ 已认证</span>' : ""}${origName}`;
+  const handleText = info.canonicalUrl?.replace(/^https?:\/\/(www\.)?(youtube\.com|tiktok\.com)\//, "") ?? "";
+  $("p-handle").textContent = handleText;
+  $("p-handle").href = info.canonicalUrl ?? "#";
+
+  const desc = info.description?.trim();
+  $("p-desc").textContent = desc || "（频道未填写简介）";
+
+  const facts = [];
+  if (latest.channelVideoCount != null) facts.push(`视频总数 <b>${fmtF(latest.channelVideoCount)}</b>`);
+  if (info.joinedDate) facts.push(`加入时间 <b>${info.joinedDate.replaceAll("-", "/")}</b>`);
+  if (info.country) facts.push(`国家/地区 <b>${info.country}</b>`);
+  if (info.availableCountryCodes?.length) facts.push(`可用国家 <b>${info.availableCountryCodes.length}</b> 个`);
+  if (info.isFamilySafe != null) facts.push(info.isFamilySafe ? "内容分级 <b>全年龄</b>" : "内容分级 <b>非全年龄</b>");
+  facts.push(`<span class="cid">${info.channelId ?? "?"}</span>`);
+  $("p-facts").innerHTML = facts.map((f) => `<div>${f}</div>`).join("");
+
+  $("p-links").innerHTML =
+    (info.group ? `<span class="chip" style="color:var(--purple);background:rgba(167,139,250,.12);border-color:rgba(167,139,250,.35)">📁 ${info.group}</span>` : "") +
+    (info.tags ?? []).map((t) => `<span class="chip" style="color:var(--green);background:rgba(52,211,153,.1);border-color:rgba(52,211,153,.35)">#${t}</span>`).join("") +
+    (info.links ?? [])
+      .map((l) => `<a class="chip" href="${l.url ?? "#"}" target="_blank" rel="noopener">🔗 ${l.title ?? l.url}</a>`)
+      .join("");
+  $("p-keywords").innerHTML = (info.keywords ?? [])
+    .map((k) => `<span class="chip kw">${k}</span>`)
+    .join("");
+
+  // 备注/分组编辑（仅本地服务模式）
+  $("meta-edit").style.display = "none";
+  $("p-editbtn").style.display = apiOk ? "flex" : "none";
+}
+
+// ---------- ② KPI ----------
+// 长数字自动缩小字号，保证不溢出
+function setKpiValue(el, text) {
+  el.textContent = text;
+  el.style.fontSize = text.length >= 12 ? "15px" : text.length >= 9 ? "18px" : "22px";
+}
+
+function renderKpis(platform, records, rows) {
+  const latest = records[records.length - 1];
+  const subsOf = (r) => (platform === "youtube" ? r.subscribers : r.followers);
+  const totalOf = (r) => (platform === "youtube" ? r.channelTotalViews : r.hearts);
+  // records 已按时间范围过滤，首条即对比基线
+  const base = records.length > 1 ? records[0] : null;
+  const metaText = base ? `${rangeLabel()} · vs ${base.date}` : "等待更多快照";
+
+  // 涨跌徽章紧跟所属数值（同行右侧）
+  setKpiValue($("k-subs"), fmtC(subsOf(latest)));
+  $("k-subs-badge").innerHTML =
+    base && subsOf(base) != null && subsOf(latest) != null ? badge(subsOf(latest) - subsOf(base)) : "";
+  $("k-subs-delta").textContent = metaText;
+
+  setKpiValue($("k-tviews"), fmtC(totalOf(latest)));
+  $("k-tviews-badge").innerHTML =
+    base && totalOf(base) != null && totalOf(latest) != null ? badge(totalOf(latest) - totalOf(base)) : "";
+  $("k-tviews-delta").textContent = base ? metaText : "";
+
+  const withViews = rows.filter((r) => r.views != null);
+  const sum = withViews.reduce((a, r) => a + r.views, 0);
+  setKpiValue($("k-sum"), fmtC(sum || null));
+
+  // 基线快照中同批视频的数据（新增视频按 0 计，增量即全部播放）
+  const baseV = base?.videos ?? {};
+  const baseSum = withViews.reduce((a, r) => a + (baseV[r.id]?.views ?? 0), 0);
+  const baseMed = median(withViews.map((r) => baseV[r.id]?.views ?? 0));
+  const baseAvg = withViews.length ? baseSum / withViews.length : null;
+  const baseLikeSum = rows.reduce((a, r) => a + (baseV[r.id]?.likes ?? 0), 0);
+  const baseEngArr = rows
+    .filter((r) => r.engagement != null)
+    .map((r) => {
+      const bv = baseV[r.id]?.views ?? 0, bl = baseV[r.id]?.likes ?? 0;
+      return bv ? (bl / bv) * 100 : null;
+    })
+    .filter((x) => x != null);
+  const baseEngAvg = baseEngArr.length ? baseEngArr.reduce((a, b) => a + b, 0) / baseEngArr.length : null;
+
+  const approxN = rows.filter((r) => r.approx).length;
+  const pct = platform === "youtube" && latest.channelTotalViews ? `占全频道 ${(sum / latest.channelTotalViews * 100).toFixed(2)}%` : "";
+  $("k-sum-badge").innerHTML = base ? badge(sum - baseSum) : "";
+  $("k-sum-sub").textContent = [rangeLabel() + "发布", pct, approxN ? `${approxN} 个≈近似值` : ""].filter(Boolean).join(" · ");
+
+  const med = median(withViews.map((r) => r.views));
+  const avgNow = withViews.length ? Math.round(sum / withViews.length) : null;
+  $("k-avg").textContent = withViews.length ? compact.format(avgNow) : "–";
+  $("k-med").textContent = withViews.length ? fmtC(med) : "–";
+  $("k-avg-badge").innerHTML =
+    base && avgNow != null && baseAvg != null ? badge(avgNow - Math.round(baseAvg)) : "";
+  $("k-med-badge").innerHTML =
+    base && baseMed != null ? badge(med - baseMed) : "";
+  $("k-avgmed-sub").textContent = rangeLabel() + "发布的视频";
+
+  const likeSum = rows.reduce((a, r) => a + (r.likes ?? 0), 0);
+  const engs = rows.filter((r) => r.engagement != null);
+  const engAvg = engs.length ? engs.reduce((a, r) => a + r.engagement, 0) / engs.length : null;
+  setKpiValue($("k-like"), fmtC(likeSum || null));
+  $("k-like-badge").innerHTML = base ? badge(likeSum - baseLikeSum) : "";
+  const engDelta = base && engAvg != null && baseEngAvg != null ? engAvg - baseEngAvg : null;
+  const engBadge = engDelta == null ? "" :
+    `<span class="badge ${engDelta >= 0 ? "up" : "down"}">${engDelta >= 0 ? "+" : ""}${engDelta.toFixed(2)}%</span>`;
+  $("k-eng").innerHTML = engAvg == null ? "" : `<span>赞播比 ${engAvg.toFixed(2)}%</span> ${engBadge}`;
+
+  const top = [...withViews].sort((a, b) => b.views - a.views)[0];
+  const kTop = $("k-top");
+  kTop.textContent = top ? top.title.slice(0, 20) + (top.title.length > 20 ? "…" : "") : "–";
+  kTop.title = top?.title ?? "";
+  const topDelta = base && top ? top.views - (baseV[top.id]?.views ?? 0) : null;
+  $("k-top-sub").innerHTML = top && top.views != null
+    ? `<span>${compact.format(top.views)} 次播放</span>` + (topDelta != null ? badge(topDelta) : "")
+    : "";
+}
+
+// 环图扇区上绘制百分比
+const doughnutPctPlugin = {
+  id: "doughnutPct",
+  afterDraw(chart) {
+    if (!["doughnut", "pie"].includes(chart.config.type)) return;
+    const total = chart.data.datasets[0]?.data.reduce((a, b) => a + (b || 0), 0) || 0;
+    if (!total) return;
+    const meta = chart.getDatasetMeta(0);
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    meta.data.forEach((arc, i) => {
+      const v = chart.data.datasets[0].data[i] || 0;
+      const ratio = v / total;
+      if (ratio < 0.04) return; // 扇区太小不放文字
+      const pct = (ratio * 100).toFixed(ratio < 0.1 ? 1 : 0) + "%";
+      const pos = arc.getCenterPoint();
+      ctx.font = "700 13px -apple-system, 'PingFang SC', sans-serif";
+      ctx.fillStyle = "#fff";
+      ctx.fillText(pct, pos.x, pos.y);
+    });
+    ctx.restore();
+  },
+};
+
+// ---------- ③④⑤⑥ 图表 ----------
+function renderCharts(platform, records, rows) {
+  const subsLabel = platform === "youtube" ? "订阅数" : "粉丝数";
+  const totalLabel = platform === "youtube" ? "总播放量" : "累计获赞";
+  const subsOf = (r) => (platform === "youtube" ? r.subscribers : r.followers);
+  const totalOf = (r) => (platform === "youtube" ? r.channelTotalViews : r.hearts);
+
+  // 增长趋势（双轴）
+  makeChart("c-growth", {
+    type: "line",
+    data: {
+      labels: records.map((r) => r.date),
+      datasets: [
+        { label: subsLabel, data: records.map(subsOf), borderColor: "#4f8cff", backgroundColor: "#4f8cff22", yAxisID: "y", fill: true, tension: 0.3, pointRadius: 3 },
+        { label: totalLabel, data: records.map(totalOf), borderColor: "#34d399", backgroundColor: "#34d39922", yAxisID: "y1", fill: true, tension: 0.3, pointRadius: 3 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: "#8b93a7" } },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${full.format(c.parsed.y)}` } },
+      },
+      scales: {
+        x: { ticks: { color: "#8b93a7", maxRotation: 0, autoSkipPadding: 20 }, grid: { display: false } },
+        y: { ...AXIS, position: "left", title: { display: true, text: subsLabel, color: "#4f8cff", font: { size: 11 } }, ticks: { color: "#4f8cff", callback: (v) => compact.format(v) } },
+        y1: { ...AXIS, position: "right", title: { display: true, text: totalLabel, color: "#34d399", font: { size: 11 } }, ticks: { color: "#34d399", callback: (v) => compact.format(v) }, grid: { drawOnChartArea: false } },
+      },
+    },
+  });
+
+  const withViews = rows.filter((r) => r.views != null);
+  const top10 = [...withViews].sort((a, b) => b.views - a.views).slice(0, 10);
+  hbar("c-top", top10.map((r) => r.title.slice(0, 30)), top10.map((r) => r.views), "#4f8cff", fmtF,
+    (i) => [`发布时间: ${fmtDT(top10[i])}`, `类型: ${top10[i].shorts ? "Short" : "视频"}`]);
+
+  const engTop = [...rows.filter((r) => r.engagement != null)].sort((a, b) => b.engagement - a.engagement).slice(0, 10);
+  hbar("c-engage", engTop.map((r) => r.title.slice(0, 16)), engTop.map((r) => +r.engagement.toFixed(2)), "#f59e0b", (v) => v.toFixed(2) + "%",
+    (i) => [`发布时间: ${fmtDT(engTop[i])}`]);
+
+  // 播放量分布（对数档位）
+  const buckets = [["<1K", 0, 999], ["1K+", 1e3, 9999], ["10K+", 1e4, 99999], ["100K+", 1e5, 999999], ["1M+", 1e6, Infinity]];
+  vbar("c-dist",
+    buckets.map((b) => b[0]),
+    buckets.map(([, lo, hi]) => withViews.filter((r) => r.views >= lo && r.views <= hi).length),
+    "#38bdf8"
+  );
+
+  // 发布习惯
+  const WD = ["周一","周二","周三","周四","周五","周六","周日"];
+  const wd = new Array(7).fill(0);
+  for (const r of rows) {
+    const d = r.publishedFull ? new Date(r.publishedFull) : (r.published ? new Date(r.published + "T00:00:00") : null);
+    if (d && !Number.isNaN(d)) wd[(d.getDay() + 6) % 7]++;
+  }
+  vbar("c-weekday", WD, wd, "#a78bfa");
+
+  const hours = new Array(24).fill(0);
+  let hourCount = 0;
+  for (const r of rows) {
+    if (!r.publishedFull) continue;
+    const d = new Date(r.publishedFull);
+    if (Number.isNaN(d)) continue;
+    hours[d.getHours()]++; hourCount++;
+  }
+  if (hourCount) {
+    $("e-hour").style.display = "none";
+    vbar("c-hour", hours.map((_, i) => String(i) + "时"), hours, "#f59e0b", { font: { size: 10.5 } });
+  } else {
+    Chart.getChart("c-hour")?.destroy();
+    $("e-hour").style.display = "flex";
+  }
+
+  // 月度节奏：固定最近 12 个月（无数据的月份补 0）
+  const byMonth = {};
+  for (const r of rows) {
+    if (!r.published) continue;
+    byMonth[r.published.slice(0, 7)] = (byMonth[r.published.slice(0, 7)] ?? 0) + 1;
+  }
+  const anchor = new Date(records[records.length - 1].date + "T00:00:00");
+  const months = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(anchor.getFullYear(), anchor.getMonth() - i, 1);
+    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  vbar("c-cadence", months.map((m) => `${parseInt(m.slice(5), 10)}月`), months.map((m) => byMonth[m] ?? 0), "#34d399");
+
+  // 标签榜
+  const tagCount = {};
+  for (const r of rows) for (const t of hashtags(r.title)) tagCount[t] = (tagCount[t] ?? 0) + 1;
+  const tags = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  if (tags.length) {
+    $("e-tags").style.display = "none";
+    hbar("c-tags", tags.map(([t]) => t), tags.map(([, n]) => n), "#f472b6", (v) => `${v} 次`);
+  } else {
+    Chart.getChart("c-tags")?.destroy();
+    $("e-tags").style.display = "flex";
+  }
+
+  // 类型构成（数量 + 百分比）
+  const shortsN = rows.filter((r) => r.shorts).length;
+  const videoN = rows.length - shortsN;
+  const typeTotal = rows.length || 1;
+  const typeLabel = (name, n) =>
+    `${name} · ${fmtF(n)} 个（${((n / typeTotal) * 100).toFixed(1)}%）`;
+  makeChart("c-type", {
+    type: "doughnut",
+    data: {
+      labels: [typeLabel("普通视频", videoN), typeLabel("Shorts", shortsN)],
+      datasets: [{ data: [videoN, shortsN], backgroundColor: ["#60a5facc", "#f472b6cc"], borderColor: "#161920", borderWidth: 3 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: "55%",
+      plugins: {
+        legend: { position: "bottom", labels: { color: "#8b93a7", font: { size: 11.5 } } },
+        tooltip: {
+          callbacks: {
+            label: (c) => {
+              const v = c.parsed;
+              return ` ${full.format(v)} 个，占 ${((v / typeTotal) * 100).toFixed(1)}%`;
+            },
+          },
+        },
+      },
+    },
+    plugins: [doughnutPctPlugin],
+  });
+
+  // 单视频趋势选择器
+  const pick = $("video-pick");
+  pick.innerHTML = "";
+  for (const r of [...withViews].sort((a, b) => b.views - a.views)) {
+    const o = document.createElement("option");
+    o.value = r.id;
+    o.textContent = `${r.shorts ? "[Short] " : ""}${r.title.slice(0, 36)}`;
+    pick.appendChild(o);
+  }
+  pick.onchange = () => renderVideoTrend(records, pick.value);
+  if (withViews.length) renderVideoTrend(records, withViews[0].id);
+}
+
+function renderVideoTrend(records, videoId) {
+  const pts = records.flatMap((r) => {
+    const v = r.videos?.[videoId];
+    return v?.views != null ? [{ date: r.date, views: v.views }] : [];
+  });
+  makeChart("c-video", {
+    type: "line",
+    data: {
+      labels: pts.map((p) => p.date),
+      datasets: [{ data: pts.map((p) => p.views), borderColor: "#34d399", backgroundColor: "#34d39922", fill: true, tension: 0.3, pointRadius: 3 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => full.format(c.parsed.y) } } },
+      scales: {
+        x: { ticks: { color: "#8b93a7", maxRotation: 0 }, grid: { display: false } },
+        y: { ...AXIS, ticks: { ...AXIS.ticks, callback: (v) => compact.format(v) } },
+      },
+    },
+  });
+}
+
+// ---------- ⑦ 明细表 ----------
+let currentRows = [], currentKey = null, currentPlatform = "youtube";
+let sortKey = "views", sortDir = -1;
+function renderTable() {
+  const kw = $("search").value.trim().toLowerCase();
+  let rows = currentRows.filter((r) => !kw || r.title.toLowerCase().includes(kw));
+  const cmpMap = {
+    idx: (a, b) => (b.views ?? 0) - (a.views ?? 0),
+    title: (a, b) => a.title.localeCompare(b.title),
+    type: (a, b) => (b.shorts ? 1 : 0) - (a.shorts ? 1 : 0),
+  };
+  const cmp = cmpMap[sortKey];
+  rows.sort((a, b) =>
+    cmp ? cmp(a, b) * sortDir
+        : ((a[sortKey] ?? -Infinity) < (b[sortKey] ?? -Infinity) ? -1 : 1) * sortDir
+  );
+  $("tbody").innerHTML = rows.length
+    ? rows.map((r, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td><div class="vtitle"><img loading="lazy" src="${r.thumb}" alt="" /><span title="${r.title}"><a href="${r.url}" target="_blank" rel="noopener">${r.title || r.id}</a></span></div></td>
+        <td><span class="pill ${r.shorts ? "short" : "video"}">${r.shorts ? "Short" : "Video"}</span></td>
+        <td>${fmtDT(r)}</td>
+        <td class="num">${fmtDur(r.durationSec)}</td>
+        <td class="num">${
+          r.views == null
+            ? r.membersOnly
+              ? '<span class="pill member" title="会员专享视频，无公开播放数据">会员</span>'
+              : '<span class="hint" title="无公开播放数据（可能被限流或为特殊内容）">–</span>'
+            : fmtF(r.views) + (r.approx ? '<span class="hint" title="列表页缩写近似值">≈</span>' : "")
+        }</td>
+        <td class="num">${r.viewsDelta == null ? '<span class="hint">–</span>' : (r.viewsDelta >= 0 ? "+" : "") + full.format(r.viewsDelta)}</td>
+        <td class="num">${fmtF(r.likes)}</td>
+        <td class="num">${r.comments == null ? '<span class="hint">–</span>' : fmtF(r.comments)}</td>
+        <td class="num">${r.shares == null ? '<span class="hint">–</span>' : fmtF(r.shares)}</td>
+        <td class="num">${r.engagement == null ? '<span class="hint">–</span>' : r.engagement.toFixed(2) + "%"}</td>
+        <td class="num">${r.descriptionChars ?? '<span class="hint">–</span>'}</td>
+      </tr>`).join("")
+    : `<tr><td colspan="12" style="color:var(--muted)">无匹配结果</td></tr>`;
+  document.querySelectorAll("th[data-k]").forEach((th) => {
+    th.querySelector(".arrow")?.remove();
+    if (th.dataset.k === sortKey) th.insertAdjacentHTML("beforeend", `<span class="arrow">${sortDir === 1 ? "▲" : "▼"}</span>`);
+  });
+}
+document.querySelectorAll("th[data-k]").forEach((th) => {
+  th.onclick = () => {
+    const k = th.dataset.k;
+    if (k === sortKey) sortDir *= -1;
+    else [sortKey, sortDir] = [k, -1];
+    renderTable();
+  };
+});
+$("search").oninput = renderTable;
+
+// ---------- CSV 导出 ----------
+$("export").onclick = () => {
+  const q = (s) => `"${String(s ?? "").replaceAll('"', '""')}"`;
+  const lines = [["标题", "链接", "类型", "会员", "发布日期", "精确发布时间", "时长秒", "播放量", "播放增量", "点赞", "评论", "分享", "赞播比%", "简介字数"].join(",")];
+  for (const r of currentRows) {
+    lines.push([q(r.title), r.url, r.shorts ? "Short" : "Video", r.membersOnly ? "是" : "", r.published ?? "", r.publishedFull ?? "", r.durationSec ?? "", r.views ?? "", r.viewsDelta ?? "", r.likes ?? "", r.comments ?? "", r.shares ?? "", r.engagement?.toFixed(2) ?? "", r.descriptionChars ?? ""].join(","));
+  }
+  const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `youtube-${currentKey}-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+// ---------- 主渲染 ----------
+function renderChannel(key) {
+  currentKey = key;
+  const ch = channels[key];
+  const platform = ch.platform;
+  const records = recordsInRange(ch.records ?? []);
+  const latest = records[records.length - 1];
+  const allRows = buildRows(records);
+  currentPlatform = platform;
+
+  // 增长图表元信息：数据积累情况（解释为什么不同范围可能显示相同曲线）
+  const fullRecords = ch.records ?? [];
+  const gm = $("growth-meta");
+  if (gm && fullRecords.length) {
+    gm.textContent = ` · 已积累 ${fullRecords.length} 天快照（自 ${fullRecords[0].date}）` +
+      (rangeDays && fullRecords.length <= rangeDays ? " · 数据积累尚不足，切换范围暂无差异" : "");
+  }
+
+  // 视频级数据按发布时间过滤到所选范围（选7天=只看近7天发布的视频）
+  let rows = allRows;
+  if (rangeDays) {
+    const cutoff = new Date(latest.date);
+    cutoff.setDate(cutoff.getDate() - rangeDays);
+    rows = allRows.filter((r) => r.published && new Date(r.published) >= cutoff);
+  }
+  currentRows = rows;
+  const countHint = $("range-count");
+  if (countHint) countHint.textContent = `范围内发布视频 ${rows.length}/${allRows.length} 个`;
+
+  // 平台差异化
+  $("k-subs-label").textContent = platform === "youtube" ? "订阅数（近似）" : "粉丝数";
+  $("k-tviews-label").textContent = platform === "youtube" ? "频道总播放量" : "累计获赞";
+  const hasVideos = platform === "youtube" || (latest.videoCountTracked ?? 0) > 0;
+  $("video-sections").style.display = hasVideos ? "" : "none";
+  $("tiktok-note").style.display = !hasVideos ? "block" : "none";
+  $("export").style.display = hasVideos ? "" : "none";
+
+  renderProfile(platform, ch.info ?? {}, latest);
+  renderKpis(platform, records, currentRows);
+  try {
+    renderCharts(platform, records, currentRows);
+  } catch (e) {
+    console.error("图表渲染失败（不影响表格）:", e);
+  }
+  renderTable();
+}
+$("channel").onchange = () => renderChannel($("channel").value);
+buildGroupFilter();
+buildTagFilter();
+rebuildChannelSelect();
+renderChannel(channelKeys[0]);
+</script>
+</body>
+</html>

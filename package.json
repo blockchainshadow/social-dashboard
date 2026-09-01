@@ -1,0 +1,8 @@
+{
+  "name": "social-dashboard",
+  "private": true,
+  "description": "YouTube + TikTok 数据看板",
+  "dependencies": {
+    "playwright": "^1.62.1"
+  }
+}
