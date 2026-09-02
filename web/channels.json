@@ -1,0 +1,117 @@
+[
+  {
+    "platform": "youtube",
+    "handle": "@mkbhd",
+    "all": true,
+    "tags": [
+      "科技",
+      "评测"
+    ],
+    "alias": "MKBHD 主号",
+    "group": "科技"
+  },
+  {
+    "platform": "youtube",
+    "handle": "@EchoPlayyy",
+    "all": true,
+    "tags": [
+      "恐怖游戏",
+      "油管"
+    ],
+    "alias": "矩阵游戏1",
+    "group": "游戏"
+  },
+  {
+    "platform": "youtube",
+    "handle": "@bestpartners",
+    "all": true,
+    "alias": "大飞",
+    "group": "科普",
+    "tags": [
+      "AI",
+      "科技",
+      "科普"
+    ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@Fisk",
+    "all": true,
+    "group": "游戏",
+    "tags": [
+      "恐怖游戏",
+      "油管"
+    ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@nivvyn",
+    "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@zeng37CN",
+    "all": true,
+    "group": "生活",
+    "tags": [
+      "生活",
+      "记录"
+    ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@JacksonGame",
+    "group": "游戏",
+    "tags": [
+      "达人",
+      "马来西亚"
+    ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@zazainchina",
+    "all": true,
+    "group": "生活",
+    "tags": [
+      "生活",
+      "记录"
+    ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@DamonTeng",
+    "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@InsideChinaLives2025",
+    "all": true,
+    "group": "生活",
+    "tags": [
+      "生活",
+      "记录"
+    ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@Conradical",
+    "all": true,
+    "group": "游戏",
+    "tags": [
+      "独立游戏",
+      "IP",
+      "工作室",
+      "steam"
+    ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@CHINALIFEJoeMei",
+    "all": true,
+    "group": "生活",
+    "tags": [
+      "生活",
+      "记录"
+    ]
+  }
+]
