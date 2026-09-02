@@ -51,6 +51,67 @@
   {
     "platform": "youtube",
     "handle": "@zeng37CN",
+    "all": true,
+    "group": "生活",
+    "tags": [
+      "生活",
+      "记录"
+    ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@JacksonGame",
+    "group": "游戏",
+    "tags": [
+      "达人",
+      "马来西亚"
+    ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@zazainchina",
+    "all": true,
+    "group": "生活",
+    "tags": [
+      "生活",
+      "记录"
+    ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@DamonTeng",
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@InsideChinaLives2025",
+    "all": true,
+    "group": "生活",
+    "tags": [
+      "生活",
+      "记录"
+    ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@Conradical",
+    "all": true,
+    "group": "游戏",
+    "tags": [
+      "独立游戏",
+      "IP",
+      "工作室",
+      "steam"
+    ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@CHINALIFEJoeMei",
+    "all": true,
+    "group": "生活",
+    "tags": [
+      "生活",
+      "记录"
+    ]
   }
 ]
