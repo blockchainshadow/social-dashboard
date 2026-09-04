@@ -1,10 +1,11 @@
 #!/bin/bash
 # YouTube 每日本地采集 + 数据备份 + Pages 自动推送（由 launchd 调度）
 cd "/Users/x/Documents/Default Project" || exit 1
+NODE_BIN="${NODE_BIN:-/Users/x/.local/bin/node}"
 mkdir -p logs backups
 
 echo "[$(date '+%F %T')] === 每日采集开始 ===" >> logs/youtube-daily.log
-node scripts/fetch-youtube.mjs >> logs/youtube-daily.log 2>&1
+"$NODE_BIN" scripts/fetch-youtube.mjs >> logs/youtube-daily.log 2>&1
 EXIT_CODE=$?
 
 # 数据备份，保留最近 30 份
