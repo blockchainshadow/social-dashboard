@@ -133,5 +133,10 @@
       "测评",
       "美食"
     ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@LanceyPooAi",
+    "owner": "yang"
   }
 ]
