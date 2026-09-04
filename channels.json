@@ -4,43 +4,43 @@
     "handle": "@mkbhd",
     "all": true,
     "tags": [
-      "ç§æ",
-      "è¯æµ"
+      "科技",
+      "评测"
     ],
-    "alias": "MKBHD ä¸»å·",
-    "group": "ç§æ"
+    "alias": "MKBHD 主号",
+    "group": "科技"
   },
   {
     "platform": "youtube",
     "handle": "@EchoPlayyy",
     "all": true,
     "tags": [
-      "æææ¸¸æ",
-      "æ²¹ç®¡"
+      "恐怖游戏",
+      "油管"
     ],
-    "alias": "ç©éµæ¸¸æ1",
-    "group": "æ¸¸æ"
+    "alias": "矩阵游戏1",
+    "group": "游戏"
   },
   {
     "platform": "youtube",
     "handle": "@bestpartners",
     "all": true,
-    "alias": "å¤§é£",
-    "group": "ç§æ®",
+    "alias": "大飞",
+    "group": "科普",
     "tags": [
       "AI",
-      "ç§æ",
-      "ç§æ®"
+      "科技",
+      "科普"
     ]
   },
   {
     "platform": "youtube",
     "handle": "@Fisk",
     "all": true,
-    "group": "æ¸¸æ",
+    "group": "游戏",
     "tags": [
-      "æææ¸¸æ",
-      "æ²¹ç®¡"
+      "恐怖游戏",
+      "油管"
     ]
   },
   {
@@ -52,29 +52,29 @@
     "platform": "youtube",
     "handle": "@zeng37CN",
     "all": true,
-    "group": "çæ´»",
+    "group": "生活",
     "tags": [
-      "çæ´»",
-      "è®°å½"
+      "生活",
+      "记录"
     ]
   },
   {
     "platform": "youtube",
     "handle": "@JacksonGame",
-    "group": "æ¸¸æ",
+    "group": "游戏",
     "tags": [
-      "è¾¾äºº",
-      "é©¬æ¥è¥¿äº"
+      "达人",
+      "马来西亚"
     ]
   },
   {
     "platform": "youtube",
     "handle": "@zazainchina",
     "all": true,
-    "group": "çæ´»",
+    "group": "生活",
     "tags": [
-      "çæ´»",
-      "è®°å½"
+      "生活",
+      "记录"
     ]
   },
   {
@@ -86,21 +86,21 @@
     "platform": "youtube",
     "handle": "@InsideChinaLives2025",
     "all": true,
-    "group": "çæ´»",
+    "group": "生活",
     "tags": [
-      "çæ´»",
-      "è®°å½"
+      "生活",
+      "记录"
     ]
   },
   {
     "platform": "youtube",
     "handle": "@Conradical",
     "all": true,
-    "group": "æ¸¸æ",
+    "group": "游戏",
     "tags": [
-      "ç¬ç«æ¸¸æ",
+      "独立游戏",
       "IP",
-      "å·¥ä½å®¤",
+      "工作室",
       "steam"
     ]
   },
@@ -108,39 +108,39 @@
     "platform": "youtube",
     "handle": "@CHINALIFEJoeMei",
     "all": true,
-    "group": "çæ´»",
+    "group": "生活",
     "tags": [
-      "çæ´»",
-      "è®°å½"
+      "生活",
+      "记录"
     ]
   },
   {
     "platform": "youtube",
     "handle": "@kiki-k1l7n",
     "all": true,
-    "group": "çæ´»",
+    "group": "生活",
     "tags": [
-      "çæ´»",
-      "è®°å½"
+      "生活",
+      "记录"
     ]
   },
   {
     "platform": "youtube",
     "handle": "@ChanDaXin",
     "all": true,
-    "group": "æµè¯",
+    "group": "测评",
     "tags": [
-      "æµè¯",
-      "ç¾é£"
+      "测评",
+      "美食"
     ]
   },
   {
     "platform": "youtube",
     "handle": "@LanceyPooAi",
     "all": true,
-    "group": "æ¸¸æ",
+    "group": "游戏",
     "tags": [
-      "æ¸¸æ",
+      "游戏",
       "Steam"
     ]
   }
