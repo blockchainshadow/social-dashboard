@@ -28,7 +28,7 @@ if [ "$EXIT_CODE" -eq 0 ] && [ -f data/youtube-history.json ]; then
   cp data/youtube-history.json web/data/youtube-history.json 2>/dev/null
   cp channels.json web/channels.json 2>/dev/null
 
-  git add data/ avatars/ channels.json web/data/ web/avatars/ web/channels.json
+  git add data/ avatars/ channels.json users.json web/data/ web/avatars/ web/channels.json web/users.json
   if ! git diff --cached --quiet; then
     git commit -m "chore(data): youtube snapshot $(date -u +%F)" >> logs/youtube-daily.log 2>&1
     if git push origin main >> logs/youtube-daily.log 2>&1; then
