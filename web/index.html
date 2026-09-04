@@ -459,7 +459,7 @@ if (apiOk) {
   // 静态托管（如 GitHub Pages）：隐藏管理入口，显示静态模式提示
   const banner = document.createElement("div");
   banner.id = "static-banner";
-  banner.textContent = "📡 静态模式 · 数据由 GitHub Actions 每日自动更新";
+  banner.textContent = "📡 静态模式 · 数据每日自动更新";
   document.querySelector(".topbar")?.prepend(banner);
 }
 if (staticMode) {
