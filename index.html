@@ -600,7 +600,7 @@ $("menu-add").onclick = () => {
 };
 $("add-cancel").onclick = () => $("add-row").classList.remove("open");
 
-$("add-btn").onclick = async () => {
+$("add-btn").addEventListener("click", async () => {
   if (staticMode) return;
   const handle = $("new-handle").value.trim();
   const platform = $("new-platform").value;
@@ -704,7 +704,7 @@ $("refresh-btn").onclick = async () => {
   }
 };
 
-$("menu-del").onclick = async () => {
+$("menu-del").addEventListener("click", async () => {
   if (staticMode) return;
   $("manage-menu").classList.remove("open");
   if (!currentKey) return;
@@ -1399,12 +1399,15 @@ renderChannel($("channel").value || channelKeys.find(authAllows) || channelKeys[
     return r.json();
   };
 
-  window.addEventListener("DOMContentLoaded", () => {
-    // 管理员在静态模式下也显示管理菜单（模块脚本在静态模式下将其隐藏，此处需在其后执行）
-    $("manage-menu").style.display = "block";
+  (() => {
+    // 模块脚本 top-level await 完成晚于 DOMContentLoaded，其 display:none 会覆盖早前设置，故用轮询保持显示
+    const showMenu = () => { $("manage-menu").style.display = "block"; };
+    showMenu();
+    const iv = setInterval(() => { if ($("manage-menu").style.display === "none") showMenu(); }, 300);
+    setTimeout(() => clearInterval(iv), 15000);
 
     // Token 设置（仅存本浏览器）
-    $("menu-token").onclick = () => {
+    $("menu-token").addEventListener("click", () => {
       const t = prompt("GitHub PAT（需 repo 权限，仅保存在本浏览器 localStorage）：", getToken());
       if (t === null) return;
       if (t.trim()) localStorage.setItem("dash-gh-token", t.trim());
