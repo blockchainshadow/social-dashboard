@@ -1404,7 +1404,7 @@ renderChannel($("channel").value || channelKeys.find(authAllows) || channelKeys[
         return;
       }
       $("add-row").classList.remove("open");
-      alert("已提交到 GitHub。\n频道数据将在下次每日快照（每日 9:30 自动抓取）后出现在看板。");
+      alert(body.mine ? "该频道已在你的管理中。" : "已提交到 GitHub。\n频道数据将在下次每日快照（每日 9:30 自动抓取）后出现在看板。");
     } catch (e) {
       alert("添加失败：" + e.message);
     } finally {
