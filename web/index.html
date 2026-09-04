@@ -167,9 +167,62 @@
 
   footer { color: var(--muted); font-size: 12px; margin-top: 32px; line-height: 1.7; }
   #error { display: none; background: #2a1215; border: 1px solid #7f1d1d; color: #fca5a5; border-radius: 10px; padding: 14px 16px; margin: 16px 0; }
+  #auth-gate input:focus { outline: 1px solid #1f6feb; }
 </style>
 </head>
 <body>
+<!-- V1.0A 身份验证登录门 -->
+<div id="auth-gate" style="position:fixed;inset:0;background:#0d1117;display:none;align-items:center;justify-content:center;z-index:9999">
+  <div style="background:#161b22;border:1px solid #30363d;border-radius:12px;padding:32px;width:320px;box-shadow:0 8px 40px rgba(0,0,0,.5)">
+    <h2 style="margin:0 0 4px;font-size:18px;color:#e6edf3">🔐 数据看板登录</h2>
+    <p style="margin:0 0 12px;font-size:12px;color:#8b949e">请使用分配的账号访问</p>
+    <p id="auth-err" style="color:#f85149;font-size:12px;min-height:16px;margin:0 0 10px"></p>
+    <input id="auth-user" placeholder="用户名" autocomplete="username" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:8px 10px;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#e6edf3">
+    <input id="auth-pass" type="password" placeholder="密码" autocomplete="current-password" style="width:100%;box-sizing:border-box;margin-bottom:14px;padding:8px 10px;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#e6edf3">
+    <button id="auth-login" style="width:100%;padding:9px;border-radius:8px;border:0;background:#1f6feb;color:#fff;font-weight:600;cursor:pointer">登录</button>
+  </div>
+</div>
+<script>
+// ---------- V1.0A 身份验证（UI 层门禁） ----------
+(async () => {
+  let users = null;
+  try {
+    users = (await fetch("users.json?t=" + Date.now()).then((r) => r.json())).users ?? null;
+  } catch {}
+  if (!users || !users.length) return; // 未配置用户则不启用认证
+  const gate = document.getElementById("auth-gate");
+  const sha = async (s) => {
+    const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+    return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+  };
+  const saved = localStorage.getItem("dash-auth");
+  let session = null;
+  try { session = saved ? JSON.parse(saved) : null; } catch {}
+  const valid = session && users.some((u) => u.username === session.user);
+  if (valid) {
+    const lb = document.getElementById("auth-logout");
+    lb.style.display = "";
+    lb.textContent = "⎋ " + session.user;
+    lb.onclick = () => { localStorage.removeItem("dash-auth"); location.reload(); };
+    return;
+  }
+  gate.style.display = "flex";
+  const login = async () => {
+    const u = document.getElementById("auth-user").value.trim();
+    const p = document.getElementById("auth-pass").value;
+    const hp = await sha(p);
+    const hit = users.find((x) => x.username === u && x.pass === hp);
+    if (!hit) {
+      document.getElementById("auth-err").textContent = "用户名或密码错误";
+      return;
+    }
+    localStorage.setItem("dash-auth", JSON.stringify({ user: u, role: hit.role || "member", channels: hit.channels ?? "*" }));
+    location.reload();
+  };
+  document.getElementById("auth-login").onclick = login;
+  document.getElementById("auth-pass").addEventListener("keydown", (e) => { if (e.key === "Enter") login(); });
+})();
+</script>
 
 <div class="topbar">
   <div class="topbar-inner">
@@ -188,6 +241,7 @@
       <button data-days="0">终身</button>
     </div>
 
+    <button class="btn ghost" id="auth-logout" title="退出登录" style="display:none">退出</button>
     <div class="tb-spacer"></div>
 
     <!-- ③ 操作区 -->
@@ -413,6 +467,12 @@ for (const [platform, file] of [["youtube", "youtube-history"], ["tiktok", "tikt
   }
 }
 const channelKeys = Object.keys(channels);
+
+// ---------- V1.0A 权限过滤（读 localStorage 会话，admin 全量，member 仅限授权频道） ----------
+let AUTH = null;
+try { AUTH = JSON.parse(localStorage.getItem("dash-auth") || "null"); } catch {}
+const authAllows = (key) =>
+  !AUTH || AUTH.role === "admin" || !Array.isArray(AUTH.channels) || AUTH.channels.includes(key);
 if (!channelKeys.length) {
   $("error").style.display = "block";
   $("error").textContent = staticMode
@@ -463,6 +523,10 @@ if (apiOk) {
   document.querySelector(".topbar")?.prepend(banner);
 }
 if (staticMode) {
+  $("manage-menu").style.display = "none";
+}
+// V1.0A：成员即使在本机服务模式下也不能管理账号
+if (AUTH && AUTH.role !== "admin") {
   $("manage-menu").style.display = "none";
 }
 // 静态模式：加载 /channels.json 补充 alias/group/tags
@@ -619,7 +683,7 @@ $("menu-del").onclick = async () => {
   }
 };
 
-for (const key of channelKeys) {
+for (const key of channelKeys.filter(authAllows)) {
   const ch = channels[key];
   const o = document.createElement("option");
   o.value = key;
@@ -634,7 +698,7 @@ function buildGroupFilter(selected) {
   const sel = $("group-filter");
   const groups = new Set();
   let hasUngrouped = false;
-  for (const key of channelKeys) {
+  for (const key of channelKeys.filter(authAllows)) {
     const g = channels[key].info?.group || "";
     if (g) groups.add(g);
     else hasUngrouped = true;
@@ -656,7 +720,7 @@ function buildTagFilter(selected) {
   const sel = $("tag-filter");
   const tags = new Set();
   let hasUntagged = false;
-  for (const key of channelKeys) {
+  for (const key of channelKeys.filter(authAllows)) {
     const t = channels[key].info?.tags ?? [];
     if (t.length) for (const x of t) tags.add(x);
     else hasUntagged = true;
@@ -695,7 +759,7 @@ function rebuildChannelSelect(selectedKey) {
   const prev = selectedKey ?? sel.value;
   const byKey = Object.fromEntries([...sel.querySelectorAll("option")].map((o) => [o.value, o]));
   sel.innerHTML = "";
-  const visible = channelKeys.filter((k) => matchesGroupFilter(k) && matchesTagFilter(k));
+  const visible = channelKeys.filter((k) => authAllows(k) && matchesGroupFilter(k) && matchesTagFilter(k));
   const showGroups = currentGroupFilter() === "__all__";
   const groups = new Map();
   for (const key of visible) {
@@ -1246,7 +1310,7 @@ $("channel").onchange = () => renderChannel($("channel").value);
 buildGroupFilter();
 buildTagFilter();
 rebuildChannelSelect();
-renderChannel(channelKeys[0]);
+renderChannel($("channel").value || channelKeys.find(authAllows) || channelKeys[0]);
 </script>
 </body>
 </html>
