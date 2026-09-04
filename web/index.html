@@ -346,7 +346,7 @@
   </section>
 
   <!-- ② 核心指标 -->
-  <section>
+  <section id="kpi-section">
     <div class="sec-title">核心指标 <span class="en">Key Metrics</span></div>
     <div class="kpis">
       <div class="kpi">
@@ -1325,6 +1325,7 @@ function renderChannel(key) {
     $("video-sections").style.display = "none";
     $("export").style.display = "none";
     $("tiktok-note").style.display = "none";
+    $("kpi-section").style.display = "none";
     renderProfile(ch.platform, ch.info, null);
     $("p-facts").innerHTML = `<div>⏳ 频道已添加，首次数据采集中。约 5~10 分钟后刷新页面即可看到数据。</div>`;
     const gm = $("growth-meta"); if (gm) gm.textContent = "";
@@ -1332,6 +1333,7 @@ function renderChannel(key) {
     renderTable();
     return;
   }
+  $("kpi-section").style.display = "";
   const platform = ch.platform;
   const records = recordsInRange(ch.records ?? []);
   const latest = records[records.length - 1];
