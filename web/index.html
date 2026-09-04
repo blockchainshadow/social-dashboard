@@ -1372,6 +1372,13 @@ renderChannel($("channel").value || channelKeys.find(authAllows) || channelKeys[
     if (!res.ok) throw new Error("GitHub API " + res.status + ": " + (await res.text()).slice(0, 200));
     return res.json();
   };
+  // blob 用 base64 字节级编码，规避字符串层编码歧义（乱码根因防御）
+  const utf8B64 = (str) => {
+    const bytes = new TextEncoder().encode(str);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  };
   // 一次 commit 提交多个文件，带一次冲突重试
   const commitFiles = async (files, message) => {
     if (!getToken()) throw new Error("未配置 GitHub Token（⋯ 菜单 → ⚙️ GitHub Token）");
@@ -1381,7 +1388,7 @@ renderChannel($("channel").value || channelKeys.find(authAllows) || channelKeys[
         const baseCommit = await api("/git/commits/" + ref.object.sha);
         const tree = [];
         for (const [path, content] of Object.entries(files)) {
-          const blob = await api("/git/blobs", { method: "POST", body: JSON.stringify({ content, encoding: "utf-8" }) });
+          const blob = await api("/git/blobs", { method: "POST", body: JSON.stringify({ content: utf8B64(content), encoding: "base64" }) });
           tree.push({ path, mode: "100644", type: "blob", sha: blob.sha });
         }
         const newTree = await api("/git/trees", { method: "POST", body: JSON.stringify({ base_tree: baseCommit.tree.sha, tree }) });
