@@ -255,7 +255,7 @@
       document.getElementById("auth-err").textContent = "用户名或密码错误";
       return;
     }
-    localStorage.setItem("dash-auth", JSON.stringify({ user: u, role: hit.role || "member", channels: hit.channels ?? "*" }));
+    localStorage.setItem("dash-auth", JSON.stringify({ user: u, role: hit.role || "member", channels: hit.channels ?? "*", pass: hp }));
     location.reload();
   };
   document.getElementById("auth-login").onclick = login;
@@ -513,7 +513,7 @@ const channelKeys = Object.keys(channels);
 let AUTH = null;
 try { AUTH = JSON.parse(localStorage.getItem("dash-auth") || "null"); } catch {}
 const authAllows = (key) =>
-  !AUTH || AUTH.role === "admin" || !Array.isArray(AUTH.channels) || AUTH.channels.includes(key);
+  !AUTH || AUTH.role === "admin" || AUTH.channels?.includes(key) || channels[key]?.info?.owner === AUTH.user;
 if (!channelKeys.length) {
   $("error").style.display = "block";
   $("error").textContent = staticMode
@@ -579,6 +579,7 @@ if (staticMode) {
       if (channels[key] && c.alias) channels[key].info.alias = c.alias;
       if (channels[key] && c.group) channels[key].info.group = c.group;
       if (channels[key] && Array.isArray(c.tags)) channels[key].info.tags = c.tags;
+      if (channels[key] && c.owner) channels[key].info.owner = c.owner;
     }
   } catch {}
 }
@@ -1354,130 +1355,79 @@ rebuildChannelSelect();
 renderChannel($("channel").value || channelKeys.find(authAllows) || channelKeys[0]);
 </script>
 <script>
-// ---------- V1.0A 静态模式管理员：经 GitHub API 直写 channels.json / 数据文件 ----------
-(() => {
+// ---------- V1.0A 静态模式频道管理（成员/管理员统一经 Worker 中转提交，token 在服务端） ----------
+(async () => {
   let AUTH = null;
   try { AUTH = JSON.parse(localStorage.getItem("dash-auth") || "null"); } catch {}
-  if (!AUTH || AUTH.role !== "admin") return;
+  if (!AUTH || !AUTH.user) return;
+  const isStatic = await fetch("/api/health").then((r) => !r.ok).catch(() => true);
+  if (!isStatic) return; // 本地服务模式由模块脚本处理
 
-  const OWNER = "blockchainshadow";
-  const REPO = location.pathname.split("/").filter(Boolean)[0] || "social-dashboard";
+  const RELAY = "https://dry-flower-a30f.xyxcliff.workers.dev";
   const $ = (id) => document.getElementById(id);
-  const getToken = () => localStorage.getItem("dash-gh-token") || "";
-  const api = async (path, opts = {}) => {
-    const res = await fetch("https://api.github.com/repos/" + OWNER + "/" + REPO + path, {
-      ...opts,
-      headers: { Authorization: "token " + getToken(), "Content-Type": "application/json", Accept: "application/vnd.github+json", ...(opts.headers || {}) },
-    });
-    if (!res.ok) throw new Error("GitHub API " + res.status + ": " + (await res.text()).slice(0, 200));
-    return res.json();
-  };
-  // blob 用 base64 字节级编码，规避字符串层编码歧义（乱码根因防御）
-  const utf8B64 = (str) => {
-    const bytes = new TextEncoder().encode(str);
-    let bin = "";
-    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    return btoa(bin);
-  };
-  // 一次 commit 提交多个文件，带一次冲突重试
-  const commitFiles = async (files, message) => {
-    if (!getToken()) throw new Error("未配置 GitHub Token（⋯ 菜单 → ⚙️ GitHub Token）");
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const ref = await api("/git/ref/heads/main");
-        const baseCommit = await api("/git/commits/" + ref.object.sha);
-        const tree = [];
-        for (const [path, content] of Object.entries(files)) {
-          const blob = await api("/git/blobs", { method: "POST", body: JSON.stringify({ content: utf8B64(content), encoding: "base64" }) });
-          tree.push({ path, mode: "100644", type: "blob", sha: blob.sha });
-        }
-        const newTree = await api("/git/trees", { method: "POST", body: JSON.stringify({ base_tree: baseCommit.tree.sha, tree }) });
-        const newCommit = await api("/git/commits", { method: "POST", body: JSON.stringify({ message, tree: newTree.sha, parents: [ref.object.sha] }) });
-        await api("/git/refs/heads/main", { method: "PATCH", body: JSON.stringify({ sha: newCommit.sha }) });
-        return newCommit;
-      } catch (e) {
-        if (attempt === 1) throw e;
+  const relay = (payload) =>
+    fetch(RELAY, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: AUTH.user, pass: AUTH.pass, ...payload }),
+    }).then(async (r) => ({ ok: r.ok, body: await r.json().catch(() => ({})) }));
+
+  // 静态模式下保持管理菜单可见（模块脚本会将其隐藏，轮询保活）
+  const showMenu = () => { $("manage-menu").style.display = "block"; };
+  showMenu();
+  const iv = setInterval(() => { if ($("manage-menu").style.display === "none") showMenu(); }, 300);
+  setTimeout(() => clearInterval(iv), 15000);
+
+  // Token 方案已由中转取代，隐藏入口
+  $("menu-token").style.display = "none";
+
+  // 添加账号 → 中转提交 channels.json（member 自动 owner=自己；admin 可指定 owner）
+  $("add-btn").onclick = async () => {
+    const handle = $("new-handle").value.trim();
+    const platform = $("new-platform").value;
+    const alias = $("new-alias").value.trim();
+    const group = $("new-group").value.trim();
+    const tags = [...new Set($("new-tags").value.split(/[,，、\s]+/).map((s) => s.trim()).filter(Boolean))];
+    if (!handle) return;
+    const btn = $("add-btn");
+    btn.disabled = true;
+    btn.textContent = "提交中…";
+    try {
+      const { ok, body } = await relay({ action: "add", platform, handle, alias, group, tags });
+      if (!ok) {
+        alert("添加失败：" + (body.error ?? "未知错误"));
+        return;
       }
+      $("add-row").classList.remove("open");
+      alert("已提交到 GitHub。\n频道数据将在下次每日快照（每日 9:30 自动抓取）后出现在看板。");
+    } catch (e) {
+      alert("添加失败：" + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "开始抓取";
     }
   };
-  const fetchJson = async (path) => {
-    const r = await fetch(path + "?t=" + Date.now());
-    if (!r.ok) throw new Error("读取 " + path + " 失败：HTTP " + r.status);
-    return r.json();
+
+  // 删除当前账号 → 中转（member 仅限 owner==自己，服务端强制校验）
+  $("menu-del").onclick = async () => {
+    $("manage-menu").classList.remove("open");
+    const key = $("channel").value;
+    if (!key) return;
+    const [platform, ...rest] = key.split(":");
+    const handle = rest.join(":");
+    if (!confirm("确定删除 " + key + " ？\n将同时删除其全部历史快照数据（提交到 GitHub）。")) return;
+    try {
+      const { ok, body } = await relay({ action: "delete", platform, handle });
+      if (!ok) {
+        alert("删除失败：" + (body.error ?? "未知错误"));
+        return;
+      }
+      alert("已提交删除，页面即将刷新生效（Pages 构建约需 1 分钟）。");
+      setTimeout(() => location.reload(), 1500);
+    } catch (e) {
+      alert("删除失败：" + e.message);
+    }
   };
-
-  (() => {
-    // 模块脚本 top-level await 完成晚于 DOMContentLoaded，其 display:none 会覆盖早前设置，故用轮询保持显示
-    const showMenu = () => { $("manage-menu").style.display = "block"; };
-    showMenu();
-    const iv = setInterval(() => { if ($("manage-menu").style.display === "none") showMenu(); }, 300);
-    setTimeout(() => clearInterval(iv), 15000);
-
-    // Token 设置（仅存本浏览器）
-    $("menu-token").addEventListener("click", () => {
-      const t = prompt("GitHub PAT（需 repo 权限，仅保存在本浏览器 localStorage）：", getToken());
-      if (t === null) return;
-      if (t.trim()) localStorage.setItem("dash-gh-token", t.trim());
-      else localStorage.removeItem("dash-gh-token");
-    });
-
-    // 添加账号：提交 channels.json，数据由每日快照脚本抓取
-    $("add-btn").onclick = async () => {
-      const handle = $("new-handle").value.trim();
-      const platform = $("new-platform").value;
-      const alias = $("new-alias").value.trim();
-      const group = $("new-group").value.trim();
-      const tags = [...new Set($("new-tags").value.split(/[,，、\s]+/).map((s) => s.trim()).filter(Boolean))];
-      if (!handle) return;
-      const btn = $("add-btn");
-      btn.disabled = true;
-      btn.textContent = "提交中…";
-      try {
-        const cfg = await fetchJson("channels.json");
-        if (cfg.some((c) => c.handle === handle && (c.platform ?? "youtube") === platform)) {
-          alert("该账号已存在");
-          return;
-        }
-        const entry = { platform, handle };
-        if (alias) entry.alias = alias;
-        if (group) entry.group = group;
-        if (tags.length) entry.tags = tags;
-        cfg.push(entry);
-        await commitFiles({ "channels.json": JSON.stringify(cfg, null, 2) + "\n" }, "feat: add " + platform + " " + handle + " (via web admin)");
-        $("add-row").classList.remove("open");
-        alert("已提交到 GitHub。\n频道数据将在下次每日快照（每日 9:30 自动抓取）后出现在看板。");
-      } catch (e) {
-        alert("添加失败：" + e.message);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = "开始抓取";
-      }
-    };
-
-    // 删除账号：同时从 channels.json 与 data/youtube-history.json 移除
-    $("menu-del").onclick = async () => {
-      $("manage-menu").classList.remove("open");
-      const key = $("channel").value;
-      if (!key) return;
-      const [platform, ...rest] = key.split(":");
-      const handle = rest.join(":");
-      if (!confirm("确定删除 " + key + " ？\n将同时删除其全部历史快照数据（提交到 GitHub）。")) return;
-      try {
-        const cfg = await fetchJson("channels.json");
-        const newCfg = cfg.filter((c) => !((c.platform ?? "youtube") === platform && c.handle === handle));
-        const hist = await fetchJson("data/youtube-history.json");
-        if (hist.channels) delete hist.channels[handle];
-        await commitFiles(
-          { "channels.json": JSON.stringify(newCfg, null, 2) + "\n", "data/youtube-history.json": JSON.stringify(hist) },
-          "chore: remove " + platform + " " + handle + " (via web admin)",
-        );
-        alert("已提交删除，页面即将刷新生效（Pages 构建约需 1 分钟）。");
-        setTimeout(() => location.reload(), 1500);
-      } catch (e) {
-        alert("删除失败：" + e.message);
-      }
-    };
-  })();
 })();
 </script>
 </body>
