@@ -1365,6 +1365,10 @@ renderChannel($("channel").value || channelKeys.find(authAllows) || channelKeys[
 
   const RELAY = "https://dry-flower-a30f.xyxcliff.workers.dev";
   const $ = (id) => document.getElementById(id);
+  if (!AUTH.pass) {
+    alert("登录凭证已过期（旧版会话），请点击右上角退出后重新登录一次");
+    return;
+  }
   const relay = (payload) =>
     fetch(RELAY, {
       method: "POST",
@@ -1389,6 +1393,7 @@ renderChannel($("channel").value || channelKeys.find(authAllows) || channelKeys[
     const group = $("new-group").value.trim();
     const tags = [...new Set($("new-tags").value.split(/[,，、\s]+/).map((s) => s.trim()).filter(Boolean))];
     if (!handle) return;
+    if (!handle.startsWith("@") && !handle.startsWith("UC")) $("new-handle").value = handle = "@" + handle;
     const btn = $("add-btn");
     btn.disabled = true;
     btn.textContent = "提交中…";
