@@ -630,7 +630,7 @@ $("add-btn").addEventListener("click", async () => {
     btn.disabled = false;
     btn.textContent = "开始抓取";
   }
-};
+});
 
 // ---------- 备注名/分组编辑 ----------
 $("meta-editbtn").onclick = () => {
@@ -722,7 +722,7 @@ $("menu-del").addEventListener("click", async () => {
   } catch (e) {
     alert(`请求失败：${e.message}`);
   }
-};
+});
 
 for (const key of channelKeys.filter(authAllows)) {
   const ch = channels[key];
@@ -1412,7 +1412,7 @@ renderChannel($("channel").value || channelKeys.find(authAllows) || channelKeys[
       if (t === null) return;
       if (t.trim()) localStorage.setItem("dash-gh-token", t.trim());
       else localStorage.removeItem("dash-gh-token");
-    };
+    });
 
     // 添加账号：提交 channels.json，数据由每日快照脚本抓取
     $("add-btn").onclick = async () => {
