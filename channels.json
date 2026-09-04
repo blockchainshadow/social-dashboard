@@ -113,5 +113,35 @@
       "生活",
       "记录"
     ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@kiki-k1l7n",
+    "all": true,
+    "group": "生活",
+    "tags": [
+      "生活",
+      "记录"
+    ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@ChanDaXin",
+    "all": true,
+    "group": "测评",
+    "tags": [
+      "测评",
+      "美食"
+    ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@LanceyPooAi",
+    "all": true,
+    "group": "游戏",
+    "tags": [
+      "游戏",
+      "Steam"
+    ]
   }
 ]
