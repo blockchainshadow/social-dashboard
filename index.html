@@ -953,7 +953,10 @@ function renderProfile(platform, info, latest) {
     (info.group ? `<span class="chip" style="color:var(--purple);background:rgba(167,139,250,.12);border-color:rgba(167,139,250,.35)">📁 ${info.group}</span>` : "") +
     (info.tags ?? []).map((t) => `<span class="chip" style="color:var(--green);background:rgba(52,211,153,.1);border-color:rgba(52,211,153,.35)">#${t}</span>`).join("") +
     (info.links ?? [])
-      .map((l) => `<a class="chip" href="${l.url ?? "#"}" target="_blank" rel="noopener">🔗 ${l.title ?? l.url}</a>`)
+      .map((l) => {
+        const u = l.url && !/^[a-z][a-z0-9+.-]*:/i.test(l.url) ? "https://" + l.url : (l.url ?? "#");
+        return `<a class="chip" href="${u}" target="_blank" rel="noopener">🔗 ${l.title ?? l.url}</a>`;
+      })
       .join("");
   $("p-keywords").innerHTML = (info.keywords ?? [])
     .map((k) => `<span class="chip kw">${k}</span>`)
