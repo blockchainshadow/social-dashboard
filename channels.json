@@ -143,5 +143,12 @@
       "游戏",
       "Steam"
     ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@qoder_relaytest",
+    "owner": "zhou",
+    "alias": "中转测试",
+    "group": "测试"
   }
 ]
