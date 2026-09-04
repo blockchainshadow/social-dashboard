@@ -143,5 +143,11 @@
       "游戏",
       "Steam"
     ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@qoder_test3",
+    "alias": "测试3",
+    "group": "测试"
   }
 ]
