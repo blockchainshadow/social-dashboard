@@ -143,5 +143,12 @@
       "游戏",
       "Steam"
     ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@qoder_zhoutest",
+    "owner": "zhou",
+    "alias": "zhou的测试",
+    "group": "测试"
   }
 ]
