@@ -530,9 +530,11 @@ export function mergeIntoHistory(history, { handle, profile, about, record }) {
 async function main() {
   const all = await readConfig();
   // 只处理 youtube 平台的账号（tiktok 由 fetch-tiktok.mjs 负责）
-  const channels = all.filter(
-    (c) => (typeof c === "string" ? "youtube" : c.platform ?? "youtube") === "youtube"
-  );
+  const onlyArg = process.argv.includes("--only") ? process.argv[process.argv.indexOf("--only") + 1] : null;
+  const only = onlyArg ? onlyArg.split(",").map((x) => (x.trim().startsWith("@") ? x.trim() : "@" + x.trim())) : null;
+  const channels = all
+    .filter((c) => (typeof c === "string" ? "youtube" : c.platform ?? "youtube") === "youtube")
+    .filter((c) => !only || only.includes(typeof c === "string" ? c : c.handle));
   if (!channels.length) {
     console.log("channels.json 中没有 platform=youtube 的账号");
     return;

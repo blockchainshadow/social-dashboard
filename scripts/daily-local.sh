@@ -1,45 +1,56 @@
 #!/bin/bash
-# YouTube 每日本地采集 + 数据备份 + Pages 自动推送（由 launchd 调度）
+# YouTube 每日采集：每频道独立提交推送（与 watch 任务经文件锁互斥，新增频道不再排队）
 cd "/Users/x/Documents/Default Project" || exit 1
 NODE_BIN="${NODE_BIN:-/Users/x/.local/bin/node}"
+LOG=logs/youtube-daily.log
 mkdir -p logs backups
 
-echo "[$(date '+%F %T')] === 每日采集开始 ===" >> logs/youtube-daily.log
-"$NODE_BIN" scripts/fetch-youtube.mjs >> logs/youtube-daily.log 2>&1
-EXIT_CODE=$?
+acquire_lock() {
+  for i in 1 2 3 4 5; do
+    if mkdir .fetch-lock 2>/dev/null; then echo $$ > .fetch-lock/pid; return 0; fi
+    if [ -n "$(find .fetch-lock -maxdepth 0 -mmin +15 2>/dev/null)" ]; then rm -rf .fetch-lock; continue; fi
+    sleep $((RANDOM % 15 + 5))
+  done
+  return 1
+}
+release_lock() { rm -rf .fetch-lock 2>/dev/null; }
+trap release_lock EXIT
 
-# 数据备份，保留最近 30 份
+sync_deploy() {
+  if [ -d web/avatars ]; then cp web/avatars/*.jpg avatars/ 2>/dev/null; fi
+  cp data/youtube-history.json web/data/youtube-history.json 2>/dev/null
+  cp channels.json web/channels.json 2>/dev/null
+  cp users.json web/users.json 2>/dev/null
+}
+
+commit_push() {
+  local msg="$1"
+  git pull --rebase origin main >> "$LOG" 2>&1 || echo "[$(date '+%F %T')] pull 失败，继续" >> "$LOG"
+  sync_deploy
+  git add data/youtube-history.json avatars web/data/youtube-history.json channels.json web/channels.json users.json web/users.json 2>/dev/null
+  if ! git diff --cached --quiet; then
+    git commit -m "$msg" >> "$LOG" 2>&1
+    git pull --rebase origin main >> "$LOG" 2>&1
+    git push origin main >> "$LOG" 2>&1 && git push origin main:v1.0a >> "$LOG" 2>&1
+  fi
+}
+
+echo "[$(date '+%F %T')] === 每日采集开始 ===" >> "$LOG"
+git pull --rebase origin main >> "$LOG" 2>&1 || true
+
+HANDLES=$("$NODE_BIN" -e "const c=require(process.cwd()+'/channels.json');console.log(c.filter(x=>(x.platform??'youtube')==='youtube').map(x=>x.handle).join('\n'))" 2>>"$LOG")
+FAIL=0
+while IFS= read -r H; do
+  [ -z "$H" ] && continue
+  acquire_lock || { echo "[$(date '+%F %T')] $H 跳过（锁占用）" >> "$LOG"; continue; }
+  echo "[$(date '+%F %T')] === $H ===" >> "$LOG"
+  "$NODE_BIN" scripts/fetch-youtube.mjs --only "$H" >> "$LOG" 2>&1 || FAIL=1
+  commit_push "data: snapshot $H [daily $(date +%F)]"
+  release_lock
+done <<< "$HANDLES"
+
 if [ -f data/youtube-history.json ]; then
   cp data/youtube-history.json "backups/youtube-history-$(date +%F).json"
   ls -t backups/youtube-history-*.json 2>/dev/null | tail -n +31 | xargs rm -f 2>/dev/null
 fi
-
-echo "[$(date '+%F %T')] === 采集结束 (exit=$EXIT_CODE) ===" >> logs/youtube-daily.log
-
-# 提交并推送数据到 GitHub（Pages 从 main 根目录自动更新）
-if [ "$EXIT_CODE" -eq 0 ] && [ -f data/youtube-history.json ]; then
-  # 先同步远程（必须在改写部署文件之前，避免工作区脏导致 rebase 失败）
-  git pull --rebase origin main >> logs/youtube-daily.log 2>&1 \
-    || echo "[$(date '+%F %T')] pull --rebase 失败，继续尝试提交推送" >> logs/youtube-daily.log
-
-  # 同步 Pages 部署文件（根目录副本）：头像 + 数据 + 频道配置
-  if [ -d web/avatars ]; then
-    cp web/avatars/*.jpg avatars/ 2>/dev/null
-  fi
-  cp data/youtube-history.json web/data/youtube-history.json 2>/dev/null
-  cp channels.json web/channels.json 2>/dev/null
-
-  git add data/ avatars/ channels.json users.json web/data/ web/avatars/ web/channels.json web/users.json
-  if ! git diff --cached --quiet; then
-    git commit -m "chore(data): youtube snapshot $(date -u +%F)" >> logs/youtube-daily.log 2>&1
-    if git push origin main >> logs/youtube-daily.log 2>&1; then
-      echo "[$(date '+%F %T')] 推送成功" >> logs/youtube-daily.log
-    else
-      echo "[$(date '+%F %T')] 推送失败（网络问题，数据保留在本地，次日重试）" >> logs/youtube-daily.log
-    fi
-  else
-    echo "[$(date '+%F %T')] 无数据变化，跳过提交" >> logs/youtube-daily.log
-  fi
-else
-  echo "[$(date '+%F %T')] 采集失败，跳过推送" >> logs/youtube-daily.log
-fi
+echo "[$(date '+%F %T')] === 每日采集结束 (fail=$FAIL) ===" >> "$LOG"

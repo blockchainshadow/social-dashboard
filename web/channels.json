@@ -137,11 +137,6 @@
   {
     "platform": "youtube",
     "handle": "@LanceyPooAi",
-    "all": true,
-    "group": "游戏",
-    "tags": [
-      "游戏",
-      "Steam"
-    ]
+    "owner": "yang"
   }
 ]

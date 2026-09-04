@@ -292,6 +292,7 @@
       <div class="menu-pop">
         <button id="menu-add">➕ 添加账号</button>
         <button id="menu-del" class="danger">🗑 删除当前账号</button>
+        <button id="menu-members">👥 成员管理</button>
         <button id="menu-token">⚙️ GitHub Token</button>
       </div>
     </div>
@@ -1382,6 +1383,15 @@ buildTagFilter();
 rebuildChannelSelect();
 renderChannel($("channel").value || channelKeys.find(authAllows) || channelKeys[0]);
 </script>
+<div id="members-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99;align-items:center;justify-content:center">
+  <div style="background:#16181f;border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:20px;max-width:560px;width:92%;max-height:80vh;overflow:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <b>👥 成员与频道</b>
+      <button id="members-close" style="background:none;border:none;color:#aaa;font-size:16px;cursor:pointer">✕</button>
+    </div>
+    <div id="members-list" style="display:flex;flex-direction:column;gap:14px;font-size:13px"></div>
+  </div>
+</div>
 <script>
 // ---------- V1.0A 静态模式频道管理（成员/管理员统一经 Worker 中转提交，token 在服务端） ----------
 (async () => {
@@ -1412,6 +1422,68 @@ renderChannel($("channel").value || channelKeys.find(authAllows) || channelKeys[
 
   // Token 方案已由中转取代，隐藏入口
   $("menu-token").style.display = "none";
+
+  // 👥 成员管理（仅管理员）：展示成员及其名下/绑定频道，可直接删除
+  const membersModal = $("members-modal");
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[m]));
+  const renderMembers = async () => {
+    const [users, cfg] = await Promise.all([
+      fetch("users.json?t=" + Date.now()).then((r) => r.json()),
+      fetch("channels.json?t=" + Date.now()).then((r) => r.json()),
+    ]);
+    const byOwner = {};
+    for (const c of cfg) {
+      const owner = c.owner ?? "(无主)";
+      (byOwner[owner] ??= []).push(c);
+    }
+    const delBtn = (c) =>
+      `<button data-del="${esc((c.platform ?? "youtube") + ":" + c.handle)}" style="background:none;border:1px solid rgba(255,255,255,.2);border-radius:6px;color:#f87171;padding:2px 10px;cursor:pointer">删</button>`;
+    const row = (c) =>
+      `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;gap:8px">
+         <span>▸ ${esc(c.alias || c.handle)} <span style="opacity:.45">${esc(c.handle)}</span></span>${delBtn(c)}
+       </div>`;
+    let html = (users.users ?? []).map((u) => {
+      const owned = byOwner[u.username] ?? [];
+      const bound = (Array.isArray(u.channels) ? u.channels : []).filter(
+        (k) => !owned.some((c) => (c.platform ?? "youtube") + ":" + c.handle === k)
+      );
+      const body = owned.map(row).join("") ||
+        (bound.length ? bound.map((k) => `<div style="padding:4px 0;opacity:.65">▸ ${esc(k)}（绑定）</div>`).join("") : `<div style="opacity:.45;padding:4px 0">（无频道）</div>`);
+      return `<div><b>${esc(u.username)}</b> <span style="opacity:.55">${u.role === "admin" ? "· 管理员" : "· 成员"}</span>${body}</div>`;
+    }).join("");
+    if (byOwner["(无主)"]?.length) {
+      html += `<div><b style="opacity:.7">无主频道</b>${byOwner["(无主)"].map(row).join("")}</div>`;
+    }
+    $("members-list").innerHTML = html;
+    membersModal.style.display = "flex";
+  };
+  $("menu-members").onclick = () => {
+    if (AUTH.role !== "admin") { alert("仅管理员可用"); return; }
+    renderMembers().catch((e) => alert("加载失败：" + e.message));
+  };
+  $("members-close").onclick = () => { membersModal.style.display = "none"; };
+  membersModal.onclick = (e) => { if (e.target === membersModal) membersModal.style.display = "none"; };
+  $("members-list").onclick = async (e) => {
+    const btn = e.target.closest("[data-del]");
+    if (!btn) return;
+    const key = btn.dataset.del;
+    if (!confirm("确定删除 " + key + " ？将同时删除其全部快照数据。")) return;
+    btn.disabled = true; btn.textContent = "…";
+    const [platform, ...rest] = key.split(":");
+    try {
+      const { ok, body } = await relay({ action: "delete", platform, handle: rest.join(":") });
+      if (!ok) {
+        alert("删除失败：" + (body.error ?? "未知错误"));
+        btn.disabled = false; btn.textContent = "删";
+        return;
+      }
+      await renderMembers();
+      setTimeout(() => location.reload(), 1200);
+    } catch (err) {
+      alert("删除失败：" + err.message);
+      btn.disabled = false; btn.textContent = "删";
+    }
+  };
 
   // 添加账号 → 中转提交 channels.json（member 自动 owner=自己；admin 可指定 owner）
   $("add-btn").onclick = async () => {
@@ -1448,7 +1520,9 @@ renderChannel($("channel").value || channelKeys.find(authAllows) || channelKeys[
     if (!key) return;
     const [platform, ...rest] = key.split(":");
     const handle = rest.join(":");
-    if (!confirm("确定删除 " + key + " ？\n将同时删除其全部历史快照数据（提交到 GitHub）。")) return;
+    if (!confirm("确定删除 " + key + " ？\n若该频道尚无数据将仅移除占位；若有数据将同时删除全部快照。")) return;
+    $("menu-del").disabled = true;
+    $("menu-del").textContent = "删除中…";
     try {
       const { ok, body } = await relay({ action: "delete", platform, handle });
       if (!ok) {
@@ -1459,6 +1533,9 @@ renderChannel($("channel").value || channelKeys.find(authAllows) || channelKeys[
       setTimeout(() => location.reload(), 1500);
     } catch (e) {
       alert("删除失败：" + e.message);
+    } finally {
+      $("menu-del").disabled = false;
+      $("menu-del").textContent = "🗑 删除当前账号";
     }
   };
 })();
