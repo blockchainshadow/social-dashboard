@@ -402,7 +402,7 @@ const channels = {}; // "platform:handle" -> {platform, handle, info, records}
 let latestUpdated = 0;
 for (const [platform, file] of [["youtube", "youtube-history"], ["tiktok", "tiktok-history"]]) {
   try {
-    const res = await fetch(`/data/${file}.json?t=${Date.now()}`);
+    const res = await fetch(`data/${file}.json?t=${Date.now()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const h = await res.json();
     latestUpdated = Math.max(latestUpdated, Date.parse(h.updatedAt) || 0);
@@ -468,7 +468,7 @@ if (staticMode) {
 // 静态模式：加载 /channels.json 补充 alias/group/tags
 if (staticMode) {
   try {
-    const cfg = await fetch("/channels.json").then(r => r.json());
+    const cfg = await fetch("channels.json").then(r => r.json());
     for (const c of cfg) {
       const key = `${c.platform ?? "youtube"}:${c.handle}`;
       if (channels[key] && c.alias) channels[key].info.alias = c.alias;
