@@ -182,6 +182,20 @@
     <button id="auth-login" style="width:100%;padding:9px;border-radius:8px;border:0;background:#1f6feb;color:#fff;font-weight:600;cursor:pointer">登录</button>
   </div>
 </div>
+<!-- V1.0A 修改密码弹窗 -->
+<div id="passwd-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:10000">
+  <div style="background:#161b22;border:1px solid #30363d;border-radius:12px;padding:28px;width:300px">
+    <h3 style="margin:0 0 10px;font-size:16px;color:#e6edf3">🔑 修改密码</h3>
+    <p style="color:#d29922;font-size:11px;margin:0 0 10px">注意：静态版修改仅对当前浏览器生效，重装浏览器或换设备后恢复为 users.json 中的密码</p>
+    <p id="passwd-err" style="color:#f85149;font-size:12px;min-height:16px;margin:0 0 8px"></p>
+    <input id="passwd-new" type="password" placeholder="新密码（至少6位）" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:8px 10px;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#e6edf3">
+    <input id="passwd-confirm" type="password" placeholder="确认新密码" style="width:100%;box-sizing:border-box;margin-bottom:14px;padding:8px 10px;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#e6edf3">
+    <div style="display:flex;gap:8px">
+      <button id="passwd-save" style="flex:1;padding:8px;border-radius:8px;border:0;background:#238636;color:#fff;font-weight:600;cursor:pointer">保存</button>
+      <button id="passwd-cancel" style="flex:1;padding:8px;border-radius:8px;border:1px solid #30363d;background:transparent;color:#e6edf3;cursor:pointer">取消</button>
+    </div>
+  </div>
+</div>
 <script>
 // ---------- V1.0A 身份验证（UI 层门禁） ----------
 (async () => {
@@ -204,6 +218,29 @@
     lb.style.display = "";
     lb.textContent = "⎋ " + session.user;
     lb.onclick = () => { localStorage.removeItem("dash-auth"); location.reload(); };
+    // 🔑 修改密码（静态版：写入本浏览器 localStorage 覆盖）
+    const pm = document.getElementById("passwd-modal");
+    document.getElementById("auth-passwd").style.display = "";
+    document.getElementById("auth-passwd").onclick = () => {
+      document.getElementById("passwd-err").textContent = "";
+      pm.style.display = "flex";
+    };
+    document.getElementById("passwd-cancel").onclick = () => { pm.style.display = "none"; };
+    document.getElementById("passwd-save").onclick = async () => {
+      const n1 = document.getElementById("passwd-new").value;
+      const n2 = document.getElementById("passwd-confirm").value;
+      const err = document.getElementById("passwd-err");
+      if (n1.length < 6) { err.textContent = "密码至少 6 位"; return; }
+      if (n1 !== n2) { err.textContent = "两次输入不一致"; return; }
+      let ov = {};
+      try { ov = JSON.parse(localStorage.getItem("dash-passwd") || "{}"); } catch {}
+      ov[session.user] = await sha(n1);
+      localStorage.setItem("dash-passwd", JSON.stringify(ov));
+      pm.style.display = "none";
+      document.getElementById("passwd-new").value = "";
+      document.getElementById("passwd-confirm").value = "";
+      alert("密码已修改（静态版本仅对当前浏览器生效）");
+    };
     return;
   }
   gate.style.display = "flex";
@@ -211,7 +248,9 @@
     const u = document.getElementById("auth-user").value.trim();
     const p = document.getElementById("auth-pass").value;
     const hp = await sha(p);
-    const hit = users.find((x) => x.username === u && x.pass === hp);
+    let overrides = {};
+    try { overrides = JSON.parse(localStorage.getItem("dash-passwd") || "{}"); } catch {}
+    const hit = users.find((x) => x.username === u && (overrides[x.username] ?? x.pass) === hp);
     if (!hit) {
       document.getElementById("auth-err").textContent = "用户名或密码错误";
       return;
@@ -242,6 +281,7 @@
     </div>
 
     <button class="btn ghost" id="auth-logout" title="退出登录" style="display:none">退出</button>
+    <button class="btn ghost" id="auth-passwd" title="修改密码" style="display:none">🔑 改密</button>
     <div class="tb-spacer"></div>
 
     <!-- ③ 操作区 -->

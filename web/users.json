@@ -7,12 +7,20 @@
       "pass": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9"
     },
     {
-      "username": "demo",
+      "username": "zhou",
       "role": "member",
       "channels": [
         "youtube:@mkbhd"
       ],
-      "pass": "d3ad9315b7be5dd53b31a273b3b3aba5defe700808305aa16a3062b76658a791"
+      "pass": "a88470039c8cc74d37f3f075f0cb275be4fe4d51f611f6086eccf24304036d3f"
+    },
+    {
+      "username": "yang",
+      "role": "member",
+      "channels": [
+        "youtube:@mkbhd"
+      ],
+      "pass": "d36524ed961d94ad70eeec1239a6ffab39539c391a77ff07bae131385425d08b"
     }
   ]
 }
