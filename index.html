@@ -581,6 +581,15 @@ if (staticMode) {
       if (channels[key] && Array.isArray(c.tags)) channels[key].info.tags = c.tags;
       if (channels[key] && c.owner) channels[key].info.owner = c.owner;
     }
+    // V1.0A：名下频道尚无快照 → 注入占位条目，立即出现在下拉框（等待首次采集）
+    for (const c of cfg) {
+      const key = `${c.platform ?? "youtube"}:${c.handle}`;
+      if (channels[key]) continue;
+      const mine = AUTH && (AUTH.role === "admin" || AUTH.channels?.includes(key) || c.owner === AUTH.user);
+      if (!mine) continue;
+      channels[key] = { platform: c.platform ?? "youtube", handle: c.handle, info: { alias: c.alias, owner: c.owner, noData: true }, records: [] };
+      channelKeys.push(key);
+    }
   } catch {}
 }
 
@@ -941,7 +950,7 @@ function renderProfile(platform, info, latest) {
   $("p-desc").textContent = desc || "（频道未填写简介）";
 
   const facts = [];
-  if (latest.channelVideoCount != null) facts.push(`视频总数 <b>${fmtF(latest.channelVideoCount)}</b>`);
+  if (latest?.channelVideoCount != null) facts.push(`视频总数 <b>${fmtF(latest.channelVideoCount)}</b>`);
   if (info.joinedDate) facts.push(`加入时间 <b>${info.joinedDate.replaceAll("-", "/")}</b>`);
   if (info.country) facts.push(`国家/地区 <b>${info.country}</b>`);
   if (info.availableCountryCodes?.length) facts.push(`可用国家 <b>${info.availableCountryCodes.length}</b> 个`);
@@ -1309,6 +1318,20 @@ $("export").onclick = () => {
 function renderChannel(key) {
   currentKey = key;
   const ch = channels[key];
+  if (!ch) return;
+  if (ch.info?.noData) {
+    currentPlatform = ch.platform;
+    currentRows = [];
+    $("video-sections").style.display = "none";
+    $("export").style.display = "none";
+    $("tiktok-note").style.display = "none";
+    renderProfile(ch.platform, ch.info, null);
+    $("p-facts").innerHTML = `<div>⏳ 频道已添加，首次数据采集中。约 5~10 分钟后刷新页面即可看到数据。</div>`;
+    const gm = $("growth-meta"); if (gm) gm.textContent = "";
+    const rc = $("range-count"); if (rc) rc.textContent = "";
+    renderTable();
+    return;
+  }
   const platform = ch.platform;
   const records = recordsInRange(ch.records ?? []);
   const latest = records[records.length - 1];
