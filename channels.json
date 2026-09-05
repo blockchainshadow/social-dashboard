@@ -156,5 +156,15 @@
     "handle": "@Pie_Mastah",
     "owner": "xiong",
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@AlphaBetaGamer",
+    "owner": "xiong",
+    "group": "游戏",
+    "tags": [
+      "游戏",
+      "tiktok"
+    ]
   }
 ]
