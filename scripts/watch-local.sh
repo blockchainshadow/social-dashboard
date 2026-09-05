@@ -12,13 +12,19 @@ fi
 echo $$ > .fetch-lock/pid
 trap 'rm -rf .fetch-lock' EXIT
 echo "[$(date '+%F %T')] === watch 开始 ===" >> "$LOG"
-git pull --rebase origin main >> "$LOG" 2>&1 || echo "pull 失败，继续用本地" >> "$LOG"
+git pull --rebase --autostash origin main >> "$LOG" 2>&1 || echo "[$(date '+%F %T')] pull 失败，继续用本地" >> "$LOG"
 /Users/x/.local/bin/node scripts/watch-new-channels.mjs >> "$LOG" 2>&1
-if ! git diff --quiet -- data/youtube-history.json channels.json || ! git diff --cached --quiet; then
-  git add data/youtube-history.json channels.json web/channels.json web/avatars avatars >> "$LOG" 2>&1
+bash scripts/sync-static.sh
+if ! git diff --quiet -- data/youtube-history.json channels.json users.json || ! git diff --cached --quiet; then
+  git add data/youtube-history.json avatars web/data/youtube-history.json channels.json web/channels.json users.json web/users.json >> "$LOG" 2>&1
   git commit -m "data: quick snapshot for newly added channels [watch]" >> "$LOG" 2>&1
-  git pull --rebase origin main >> "$LOG" 2>&1
-  git push origin main >> "$LOG" 2>&1 && git push origin main:v1.0a >> "$LOG" 2>&1 && echo "[$(date '+%F %T')] 已推送" >> "$LOG"
+  git pull --rebase --autostash origin main >> "$LOG" 2>&1
+  if git push origin main >> "$LOG" 2>&1; then
+    git push origin main:v1.0a >> "$LOG" 2>&1 || echo "[$(date '+%F %T')] push v1.0a 失败" >> "$LOG"
+    echo "[$(date '+%F %T')] 已推送" >> "$LOG"
+  else
+    echo "[$(date '+%F %T')] push main 失败（下轮自动重试）" >> "$LOG"
+  fi
 else
   echo "[$(date '+%F %T')] 无变化" >> "$LOG"
 fi
