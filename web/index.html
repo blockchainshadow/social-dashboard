@@ -72,6 +72,18 @@
   .btn:hover { filter: brightness(1.1); }
   .btn.ghost { background: var(--panel2); border: 1px solid var(--border); color: var(--text); }
   .btn.danger { background: rgba(248,113,113,.12); border: 1px solid rgba(248,113,113,.35); color: var(--down); }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .btn.ghost:hover { border-color: rgba(59,130,246,.65); color: #9ec3ff; }
+  .btn .ico { display: inline-block; }
+  .btn.refreshing .ico { animation: tb-spin .9s linear infinite; }
+  @keyframes tb-spin { to { transform: rotate(360deg); } }
+  .seg button:hover:not(.active) { background: var(--panel2); color: var(--text); }
+  select:hover { border-color: #39424e; }
+  .btn:focus-visible, select:focus-visible, .seg button:focus-visible, .menu-pop button:focus-visible { outline: 2px solid rgba(59,130,246,.5); outline-offset: 1px; }
+  .menu-pop { animation: menu-pop-in .12s ease; }
+  @keyframes menu-pop-in { from { opacity: 0; transform: translateY(-4px); } }
+  #static-banner { width: 100%; max-width: 1240px; margin: 0 auto; padding: 8px 24px 0; font-size: 12px; color: var(--muted); }
+  .topbar { box-shadow: 0 8px 24px rgba(0,0,0,.25); }
   .manage { display: none; align-items: center; gap: 8px; flex-wrap: wrap; }
   .manage label { display: flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--muted); cursor: pointer; white-space: nowrap; }
 
@@ -285,7 +297,7 @@
     <div class="tb-spacer"></div>
 
     <!-- ③ 操作区 -->
-    <button class="btn ghost" id="refresh-btn" title="重新抓取当前账号数据" style="${staticMode ? 'display:none' : ''}">⟳ 刷新</button>
+    <button class="btn ghost" id="refresh-btn" title="重新加载最新数据"><span class="ico">⟳</span> <span class="lbl">刷新</span></button>
     <button class="btn ghost" id="export" title="导出当前明细为 CSV">⬇ CSV</button>
     <div class="menu-wrap" id="manage-menu" style="display:none">
       <button class="btn ghost" id="manage-btn" title="账号管理">⋯</button>
@@ -571,6 +583,10 @@ if (staticMode) {
 if (AUTH && AUTH.role !== "admin") {
   $("manage-menu").style.display = "none";
 }
+// V1.0A：非管理员直接隐藏「成员管理」入口
+if (!AUTH || AUTH.role !== "admin") {
+  $("menu-members").style.display = "none";
+}
 // 静态模式：加载 /channels.json 补充 alias/group/tags
 if (staticMode) {
   try {
@@ -687,14 +703,44 @@ $("meta-save").onclick = async () => {
   }
 };
 
+const setRefresh = (html, spinning) => {
+  const b = $("refresh-btn");
+  b.innerHTML = html;
+  b.classList.toggle("refreshing", !!spinning);
+};
 $("refresh-btn").onclick = async () => {
-  if (staticMode) return;
   const btn = $("refresh-btn");
-  if (!currentKey) return;
+  if (btn.disabled) return;
+  btn.disabled = true;
+  if (staticMode) {
+    setRefresh('<span class="ico">⟳</span> 刷新中…', true);
+    try {
+      const res = await fetch("data/youtube-history.json?t=" + Date.now(), { cache: "no-store" });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const h = await res.json();
+      let newest = Date.parse(h.updatedAt) || 0;
+      for (const ch of Object.values(h.channels ?? {})) {
+        const rs = ch.records ?? [];
+        newest = Math.max(newest, Date.parse(rs[rs.length - 1]?.date) || 0);
+      }
+      if (newest > latestUpdated) {
+        setRefresh('<span class="ico">✓</span> 发现新数据，更新中…');
+        setTimeout(() => location.reload(), 500);
+        return;
+      }
+      setRefresh('<span class="ico">✓</span> 已是最新');
+      setTimeout(() => { setRefresh('<span class="ico">⟳</span> 刷新'); btn.disabled = false; }, 1800);
+    } catch (e) {
+      alert("刷新失败：" + e.message);
+      setRefresh('<span class="ico">⟳</span> 刷新');
+      btn.disabled = false;
+    }
+    return;
+  }
+  if (!currentKey) { btn.disabled = false; return; }
   const [platform, ...rest] = currentKey.split(":");
   const handle = rest.join(":");
-  btn.disabled = true;
-  btn.textContent = "⟳ 抓取中…（全量账号约需1-2分钟）";
+  setRefresh('<span class="ico">⟳</span> 抓取中…（约1-2分钟）', true);
   try {
     const res = await fetch("/api/refresh", {
       method: "POST",
@@ -708,10 +754,10 @@ $("refresh-btn").onclick = async () => {
       location.reload();
     }
   } catch (e) {
-    alert(`请求失败：${e.message}`);
+    alert("请求失败：" + e.message);
   } finally {
+    setRefresh('<span class="ico">⟳</span> 刷新');
     btn.disabled = false;
-    btn.textContent = "⟳ 刷新当前";
   }
 };
 
