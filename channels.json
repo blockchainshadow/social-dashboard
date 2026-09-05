@@ -166,5 +166,10 @@
       "游戏",
       "tiktok"
     ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@pixeqla",
+    "owner": "xiong"
   }
 ]
