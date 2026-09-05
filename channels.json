@@ -195,11 +195,13 @@
   {
     "platform": "youtube",
     "handle": "@thegrowthjournal_ariel",
-    "owner": "xiong"
+    "owner": "xiong",
+    "all": true
   },
   {
     "platform": "youtube",
     "handle": "@Magicaroo",
-    "owner": "xiong"
+    "owner": "xiong",
+    "all": true
   }
 ]
