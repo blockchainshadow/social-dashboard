@@ -144,5 +144,11 @@
     "handle": "@John-Brx",
     "owner": "yang",
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@天涯神贴解码",
+    "owner": "xiong",
+    "all": true
   }
 ]

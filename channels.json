@@ -148,6 +148,7 @@
   {
     "platform": "youtube",
     "handle": "@天涯神贴解码",
-    "owner": "xiong"
+    "owner": "xiong",
+    "all": true
   }
 ]
