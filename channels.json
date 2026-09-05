@@ -207,6 +207,7 @@
   {
     "platform": "youtube",
     "handle": "@Kim和Nana的遊戲世界",
-    "owner": "xiong"
+    "owner": "xiong",
+    "all": true
   }
 ]
