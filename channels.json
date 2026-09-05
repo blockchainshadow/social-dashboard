@@ -150,5 +150,10 @@
     "handle": "@天涯神贴解码",
     "owner": "xiong",
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@Pie_Mastah",
+    "owner": "xiong"
   }
 ]
