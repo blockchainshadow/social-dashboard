@@ -1444,9 +1444,13 @@ rebuildChannelSelect();
 {
   const firstKey = $("channel").value || channelKeys.find(authAllows);
   if (firstKey) renderChannel(firstKey);
-  else if (AUTH && AUTH.role === "admin" && !adminAll()) {
+  else {
+    // 无可见频道：隐藏全部内容区块，避免空骨架误导
+    document.querySelectorAll(".wrap > section").forEach((el) => (el.style.display = "none"));
     $("error").style.display = "block";
-    $("error").textContent = "当前仅显示你名下的频道（暂无）。点击顶部「🌍 全员」可查看并管理全部频道。";
+    $("error").textContent = AUTH && AUTH.role === "admin" && !adminAll()
+      ? "当前仅显示你名下的频道（暂无）。点击顶部「🌍 全员」可查看并管理全部频道，或经 👤 +/- 添加自己的频道。"
+      : "暂无可显示的频道。";
   }
 }
 </script>
