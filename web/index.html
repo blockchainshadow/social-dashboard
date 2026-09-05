@@ -82,7 +82,6 @@
   .btn:focus-visible, select:focus-visible, .seg button:focus-visible, .menu-pop button:focus-visible { outline: 2px solid rgba(59,130,246,.5); outline-offset: 1px; }
   .menu-pop { animation: menu-pop-in .12s ease; }
   @keyframes menu-pop-in { from { opacity: 0; transform: translateY(-4px); } }
-  #static-banner { width: 100%; max-width: 1240px; margin: 0 auto; padding: 8px 24px 0; font-size: 12px; color: var(--muted); }
   .topbar { box-shadow: 0 8px 24px rgba(0,0,0,.25); }
   .manage { display: none; align-items: center; gap: 8px; flex-wrap: wrap; }
   .manage label { display: flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--muted); cursor: pointer; white-space: nowrap; }
@@ -569,12 +568,6 @@ try {
 staticMode = !apiOk;
 if (apiOk) {
   $("manage-menu").style.display = "block";
-} else {
-  // 静态托管（如 GitHub Pages）：隐藏管理入口，显示静态模式提示
-  const banner = document.createElement("div");
-  banner.id = "static-banner";
-  banner.textContent = "📡 静态模式 · 数据每日自动更新";
-  document.querySelector(".topbar")?.prepend(banner);
 }
 if (staticMode) {
   $("manage-menu").style.display = "none";
