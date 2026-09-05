@@ -73,6 +73,7 @@
   .btn.ghost { background: var(--panel2); border: 1px solid var(--border); color: var(--text); }
   .btn.danger { background: rgba(248,113,113,.12); border: 1px solid rgba(248,113,113,.35); color: var(--down); }
   .btn:disabled { opacity: .55; cursor: default; }
+  .btn.active-all { background: var(--accent); border-color: var(--accent); color: #fff; }
   .btn.ghost:hover { border-color: rgba(59,130,246,.65); color: #9ec3ff; }
   .btn .ico { display: inline-block; }
   .btn.refreshing .ico { animation: tb-spin .9s linear infinite; }
@@ -295,10 +296,12 @@
 
 
     <!-- ③ 操作区 -->
+    <button class="btn ghost" id="all-btn" style="display:none" title="全员频道管理：查看并管理所有人的频道">🌍 全员</button>
     <div class="menu-wrap" id="manage-menu" style="display:none">
       <button class="btn ghost" id="manage-btn" title="添加/删除账号">👤 +/-</button>
       <div class="menu-pop">
         <button id="menu-add">➕ 添加账号</button>
+        <button id="menu-edit">✏️ 分组/标签</button>
         <button id="menu-del" class="danger">🗑 删除当前账号</button>
         <button id="menu-members">👥 成员管理</button>
         <button id="menu-token">⚙️ GitHub Token</button>
@@ -524,8 +527,10 @@ const channelKeys = Object.keys(channels);
 // ---------- V1.0A 权限过滤（读 localStorage 会话，admin 全量，member 仅限授权频道） ----------
 let AUTH = null;
 try { AUTH = JSON.parse(localStorage.getItem("dash-auth") || "null"); } catch {}
+// V1.0A：默认各角色（含 admin）只看/管自己名下频道；admin 经「🌍 全员」按钮切换全员视图
+const adminAll = () => !!AUTH && AUTH.role === "admin" && sessionStorage.getItem("dash-all") === "1";
 const authAllows = (key) =>
-  !AUTH || AUTH.role === "admin" || AUTH.channels?.includes(key) || channels[key]?.info?.owner === AUTH.user;
+  !AUTH || adminAll() || AUTH.channels?.includes(key) || channels[key]?.info?.owner === AUTH.user;
 if (!channelKeys.length) {
   $("error").style.display = "block";
   $("error").textContent = staticMode
@@ -580,6 +585,22 @@ if (AUTH && AUTH.role !== "admin") {
 if (!AUTH || AUTH.role !== "admin") {
   $("menu-members").style.display = "none";
 }
+// V1.0A：admin「🌍 全员」开关 —— 切换全员频道管理视图（sessionStorage，刷新前有效）
+if (AUTH && AUTH.role === "admin") {
+  const ab = $("all-btn");
+  ab.style.display = "";
+  const syncAllBtn = () => {
+    const on = adminAll();
+    ab.textContent = on ? "🌍 全员·开" : "🌍 全员";
+    ab.classList.toggle("active-all", on);
+  };
+  syncAllBtn();
+  ab.onclick = () => {
+    if (adminAll()) sessionStorage.removeItem("dash-all");
+    else sessionStorage.setItem("dash-all", "1");
+    location.reload();
+  };
+}
 // 静态模式：加载 /channels.json 补充 alias/group/tags
 if (staticMode) {
   try {
@@ -595,7 +616,7 @@ if (staticMode) {
     for (const c of cfg) {
       const key = `${c.platform ?? "youtube"}:${c.handle}`;
       if (channels[key]) continue;
-      const mine = AUTH && (AUTH.role === "admin" || AUTH.channels?.includes(key) || c.owner === AUTH.user);
+      const mine = AUTH && (adminAll() || AUTH.channels?.includes(key) || c.owner === AUTH.user);
       if (!mine) continue;
       channels[key] = { platform: c.platform ?? "youtube", handle: c.handle, info: { alias: c.alias, owner: c.owner, noData: true }, records: [] };
       channelKeys.push(key);
@@ -1420,7 +1441,14 @@ $("channel").onchange = () => renderChannel($("channel").value);
 buildGroupFilter();
 buildTagFilter();
 rebuildChannelSelect();
-renderChannel($("channel").value || channelKeys.find(authAllows) || channelKeys[0]);
+{
+  const firstKey = $("channel").value || channelKeys.find(authAllows);
+  if (firstKey) renderChannel(firstKey);
+  else if (AUTH && AUTH.role === "admin" && !adminAll()) {
+    $("error").style.display = "block";
+    $("error").textContent = "当前仅显示你名下的频道（暂无）。点击顶部「🌍 全员」可查看并管理全部频道。";
+  }
+}
 </script>
 <div id="members-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99;align-items:center;justify-content:center">
   <div style="background:#16181f;border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:20px;max-width:560px;width:92%;max-height:80vh;overflow:auto">
@@ -1461,6 +1489,30 @@ renderChannel($("channel").value || channelKeys.find(authAllows) || channelKeys[
 
   // Token 方案已由中转取代，隐藏入口
   $("menu-token").style.display = "none";
+
+  // ✏️ 分组/标签：仅频道 owner（或 admin 全员模式）可编辑，经中转更新 channels.json
+  $("menu-edit").onclick = async () => {
+    $("manage-menu").classList.remove("open");
+    const key = $("channel").value;
+    if (!key) return;
+    let cfg;
+    try { cfg = await fetch("channels.json?t=" + Date.now()).then((r) => r.json()); } catch { alert("读取频道配置失败"); return; }
+    const [platform, ...rest] = key.split(":");
+    const handle = rest.join(":");
+    const item = (cfg ?? []).find((c) => (c.platform ?? "youtube") === platform && c.handle === handle);
+    const isOwner = !!(item && item.owner === AUTH.user);
+    const allMode = sessionStorage.getItem("dash-all") === "1" && AUTH.role === "admin";
+    if (!isOwner && !allMode) { alert("只能编辑自己名下的频道"); return; }
+    const g = prompt("分组名称（留空 = 取消分组）", item?.group ?? "");
+    if (g === null) return;
+    const t = prompt("标签（逗号分隔，可留空）", (item?.tags ?? []).join(","));
+    if (t === null) return;
+    try {
+      const { ok, body } = await relay({ action: "update", platform, handle, group: g.trim(), tags: [...new Set(t.split(/[,，、\s]+/).map((x) => x.trim()).filter(Boolean))] });
+      if (!ok) { alert("保存失败：" + (body.error ?? "未知错误")); return; }
+      alert("已保存。约 1 分钟后点「⟳ 数据刷新」生效。");
+    } catch (e) { alert("请求失败：" + e.message); }
+  };
 
   // 👥 成员管理（仅管理员）：展示成员及其名下/绑定频道，可直接删除
   const membersModal = $("members-modal");
