@@ -142,6 +142,7 @@
   {
     "platform": "youtube",
     "handle": "@John-Brx",
-    "owner": "yang"
+    "owner": "yang",
+    "all": true
   }
 ]
