@@ -175,6 +175,7 @@
   .pill.video { color: #60a5fa; background: rgba(96,165,250,.13); }
   .pill.member { color: var(--amber); background: rgba(245,158,11,.14); cursor: help; }
   .hint { color: var(--muted); font-size: 12px; }
+  .tb-chip { display: inline-flex; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 7px 11px; font-size: 13.5px; color: var(--muted); white-space: nowrap; }
 
   footer { color: var(--muted); font-size: 12px; margin-top: 32px; line-height: 1.7; }
   #error { display: none; background: #2a1215; border: 1px solid #7f1d1d; color: #fca5a5; border-radius: 10px; padding: 14px 16px; margin: 16px 0; }
@@ -276,7 +277,8 @@
 
 <div class="topbar">
   <div class="topbar-inner">
-    <span class="hint" id="updated-at" style="white-space:nowrap" title="数据更新时间（你的本地时区）"></span>
+    <span class="tb-chip" id="updated-at" title="数据更新时间（你的本地时区）"></span>
+    <button class="btn ghost" id="refresh-btn" title="重新加载最新数据"><span class="ico">⟳</span> <span class="lbl">刷新</span></button>
 
     <!-- ① 上下文：我在看什么 -->
     <select id="group-filter" style="max-width:110px" title="按分组筛选"></select>
@@ -296,10 +298,8 @@
     <div class="tb-spacer"></div>
 
     <!-- ③ 操作区 -->
-    <button class="btn ghost" id="refresh-btn" title="重新加载最新数据"><span class="ico">⟳</span> <span class="lbl">刷新</span></button>
-    <button class="btn ghost" id="export" title="导出当前明细为 CSV">⬇ CSV</button>
     <div class="menu-wrap" id="manage-menu" style="display:none">
-      <button class="btn ghost" id="manage-btn" title="添加/删除账号">+/-</button>
+      <button class="btn ghost" id="manage-btn" title="添加/删除账号">👤 +/-</button>
       <div class="menu-pop">
         <button id="menu-add">➕ 添加账号</button>
         <button id="menu-del" class="danger">🗑 删除当前账号</button>
@@ -307,6 +307,7 @@
         <button id="menu-token">⚙️ GitHub Token</button>
       </div>
     </div>
+    <button class="btn ghost" id="export" title="导出当前明细为 CSV">⬇ CSV</button>
   </div>
 
   <!-- 添加账号表单（按需展开） -->
