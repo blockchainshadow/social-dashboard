@@ -179,5 +179,10 @@
     "handle": "@SpaceFudge",
     "owner": "xiong",
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@GameEndeavor",
+    "owner": "xiong"
   }
 ]
