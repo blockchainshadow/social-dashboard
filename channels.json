@@ -165,16 +165,19 @@
     "tags": [
       "游戏",
       "tiktok"
-    ]
+    ],
+    "all": true
   },
   {
     "platform": "youtube",
     "handle": "@pixeqla",
-    "owner": "xiong"
+    "owner": "xiong",
+    "all": true
   },
   {
     "platform": "youtube",
     "handle": "@SpaceFudge",
-    "owner": "xiong"
+    "owner": "xiong",
+    "all": true
   }
 ]
