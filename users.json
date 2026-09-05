@@ -1,26 +1,32 @@
 {
-  "_comment": "pass 字段为 sha256(密码) 的 hex。生成方式：node -e \"console.log(require('crypto').createHash('sha256').update('新密码').digest('hex'))\"。member 的 channels 填 platform:handle 列表，admin 忽略该字段。",
-  "users": [
-    {
-      "username": "admin",
-      "role": "admin",
-      "pass": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9"
-    },
-    {
-      "username": "zhou",
-      "role": "member",
-      "channels": [
-        "youtube:@mkbhd"
-      ],
-      "pass": "a88470039c8cc74d37f3f075f0cb275be4fe4d51f611f6086eccf24304036d3f"
-    },
-    {
-      "username": "yang",
-      "role": "member",
-      "channels": [
-        "youtube:@mkbhd"
-      ],
-      "pass": "d36524ed961d94ad70eeec1239a6ffab39539c391a77ff07bae131385425d08b"
-    }
-  ]
+ "_comment": "pass 字段为 sha256(密码) 的 hex。生成方式：node -e \"console.log(require('crypto').createHash('sha256').update('新密码').digest('hex'))\"。member 的 channels 填 platform:handle 列表，admin 忽略该字段。",
+ "users": [
+  {
+   "username": "admin",
+   "role": "admin",
+   "pass": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9"
+  },
+  {
+   "username": "zhou",
+   "role": "member",
+   "channels": [
+    "youtube:@mkbhd"
+   ],
+   "pass": "a88470039c8cc74d37f3f075f0cb275be4fe4d51f611f6086eccf24304036d3f"
+  },
+  {
+   "username": "yang",
+   "role": "member",
+   "channels": [
+    "youtube:@mkbhd"
+   ],
+   "pass": "d36524ed961d94ad70eeec1239a6ffab39539c391a77ff07bae131385425d08b"
+  },
+  {
+   "username": "xiong",
+   "role": "member",
+   "channels": [],
+   "pass": "040b27fad3c7328da7a1a85b27aa9e4488fd1b456c4e6d724db5b09a761f6974"
+  }
+ ]
 }
