@@ -15,7 +15,7 @@ echo "[$(date '+%F %T')] === watch 开始 ===" >> "$LOG"
 git pull --rebase origin main >> "$LOG" 2>&1 || echo "pull 失败，继续用本地" >> "$LOG"
 /Users/x/.local/bin/node scripts/watch-new-channels.mjs >> "$LOG" 2>&1
 if ! git diff --quiet -- data/youtube-history.json channels.json || ! git diff --cached --quiet; then
-  git add data/youtube-history.json channels.json web/channels.json web/avatars >> "$LOG" 2>&1
+  git add data/youtube-history.json channels.json web/channels.json web/avatars avatars >> "$LOG" 2>&1
   git commit -m "data: quick snapshot for newly added channels [watch]" >> "$LOG" 2>&1
   git pull --rebase origin main >> "$LOG" 2>&1
   git push origin main >> "$LOG" 2>&1 && git push origin main:v1.0a >> "$LOG" 2>&1 && echo "[$(date '+%F %T')] 已推送" >> "$LOG"
