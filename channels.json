@@ -191,5 +191,10 @@
     "handle": "@lettacorporation",
     "owner": "xiong",
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@thegrowthjournal_ariel",
+    "owner": "xiong"
   }
 ]
