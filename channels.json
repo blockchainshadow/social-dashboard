@@ -154,6 +154,7 @@
   {
     "platform": "youtube",
     "handle": "@Pie_Mastah",
-    "owner": "xiong"
+    "owner": "xiong",
+    "all": true
   }
 ]
