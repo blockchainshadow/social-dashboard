@@ -34,7 +34,7 @@
     background: rgba(14,16,20,.82); backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--border);
   }
-  .topbar-inner { max-width: 1240px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .topbar-inner { max-width: 1680px; margin: 0 auto; padding: 10px 20px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .topbar h1 { font-size: 17px; margin: 0 auto 0 0; white-space: nowrap; }
   .tb-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .tb-spacer { flex: 1; }
@@ -278,12 +278,12 @@
 <div class="topbar">
   <div class="topbar-inner">
     <span class="tb-chip" id="updated-at" title="数据更新时间（你的本地时区）"></span>
-    <button class="btn ghost" id="refresh-btn" title="重新加载最新数据"><span class="ico">⟳</span> <span class="lbl">刷新</span></button>
+    <button class="btn ghost" id="refresh-btn" title="重新加载最新数据"><span class="ico">⟳</span> <span class="lbl">数据刷新</span></button>
 
     <!-- ① 上下文：我在看什么 -->
     <select id="group-filter" style="max-width:110px" title="按分组筛选"></select>
     <select id="tag-filter" style="max-width:110px" title="按标签筛选"></select>
-    <select id="channel" style="max-width:200px" title="切换账号"></select>
+    <select id="channel" style="max-width:160px" title="切换账号"></select>
 
     <!-- ② 时间范围 -->
     <div class="seg" id="range-seg" title="时间范围">
@@ -533,7 +533,7 @@ if (!channelKeys.length) {
     : "暂无任何频道数据。请先运行采集脚本，或在本地服务模式下添加账号。";
   throw new Error("no channels");
 }
-$("updated-at").textContent = `更新于 ${new Date(latestUpdated).toLocaleString("zh-CN")}`;
+$("updated-at").textContent = `更新于 ${new Date(latestUpdated).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })}`;
 
 // ---------- 时间范围 ----------
 let rangeDays = 7; // 7 / 28 / 90 / 0(终身)
@@ -722,10 +722,10 @@ $("refresh-btn").onclick = async () => {
         return;
       }
       setRefresh('<span class="ico">✓</span> 已是最新');
-      setTimeout(() => { setRefresh('<span class="ico">⟳</span> 刷新'); btn.disabled = false; }, 1800);
+      setTimeout(() => { setRefresh('<span class="ico">⟳</span> 数据刷新'); btn.disabled = false; }, 1800);
     } catch (e) {
       alert("刷新失败：" + e.message);
-      setRefresh('<span class="ico">⟳</span> 刷新');
+      setRefresh('<span class="ico">⟳</span> 数据刷新');
       btn.disabled = false;
     }
     return;
@@ -749,7 +749,7 @@ $("refresh-btn").onclick = async () => {
   } catch (e) {
     alert("请求失败：" + e.message);
   } finally {
-    setRefresh('<span class="ico">⟳</span> 刷新');
+    setRefresh('<span class="ico">⟳</span> 数据刷新');
     btn.disabled = false;
   }
 };
