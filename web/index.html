@@ -276,7 +276,7 @@
 
 <div class="topbar">
   <div class="topbar-inner">
-    <h1>📊 YouTube 数据看板</h1>
+    <span class="hint" id="updated-at" style="white-space:nowrap" title="数据更新时间（你的本地时区）"></span>
 
     <!-- ① 上下文：我在看什么 -->
     <select id="group-filter" style="max-width:110px" title="按分组筛选"></select>
@@ -299,7 +299,7 @@
     <button class="btn ghost" id="refresh-btn" title="重新加载最新数据"><span class="ico">⟳</span> <span class="lbl">刷新</span></button>
     <button class="btn ghost" id="export" title="导出当前明细为 CSV">⬇ CSV</button>
     <div class="menu-wrap" id="manage-menu" style="display:none">
-      <button class="btn ghost" id="manage-btn" title="账号管理">⋯</button>
+      <button class="btn ghost" id="manage-btn" title="添加/删除账号">+/-</button>
       <div class="menu-pop">
         <button id="menu-add">➕ 添加账号</button>
         <button id="menu-del" class="danger">🗑 删除当前账号</button>
@@ -307,7 +307,6 @@
         <button id="menu-token">⚙️ GitHub Token</button>
       </div>
     </div>
-    <span class="hint" id="updated-at"></span>
   </div>
 
   <!-- 添加账号表单（按需展开） -->
