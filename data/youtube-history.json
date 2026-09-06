@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-09-06T03:36:05.595Z",
+  "updatedAt": "2026-09-06T03:36:33.692Z",
   "channels": {
     "@mkbhd": {
       "info": {
@@ -331604,6 +331604,51 @@
               "title": "A Realistic Workday as a Chip Engineer in China",
               "views": 70768,
               "likes": 2956,
+              "published": "2026-06-20",
+              "publishedFull": "2026-06-21T10:03:03+00:00",
+              "durationSec": null,
+              "descriptionChars": 187,
+              "shorts": false,
+              "membersOnly": false,
+              "approx": false
+            }
+          }
+        },
+        {
+          "date": "2026-09-06",
+          "subscribers": 5220,
+          "channelTotalViews": 543976,
+          "channelVideoCount": 3,
+          "videoCountTracked": 3,
+          "videos": {
+            "dXPYbV93fJQ": {
+              "title": "The Unspoken Reality of Having a Good Job at 31 in China",
+              "views": 468253,
+              "likes": 7532,
+              "published": "2026-08-21",
+              "publishedFull": "2026-08-23T02:53:04+00:00",
+              "durationSec": null,
+              "descriptionChars": 1206,
+              "shorts": false,
+              "membersOnly": false,
+              "approx": false
+            },
+            "hwM4es-mumo": {
+              "title": "What a Normal Weekend Really Looks Like in China",
+              "views": 6376,
+              "likes": 348,
+              "published": "2026-07-11",
+              "publishedFull": "2026-07-12T12:35:17+00:00",
+              "durationSec": null,
+              "descriptionChars": 474,
+              "shorts": false,
+              "membersOnly": false,
+              "approx": false
+            },
+            "DszNwhFydrQ": {
+              "title": "A Realistic Workday as a Chip Engineer in China",
+              "views": 71442,
+              "likes": 2976,
               "published": "2026-06-20",
               "publishedFull": "2026-06-21T10:03:03+00:00",
               "durationSec": null,
