@@ -261,6 +261,7 @@
   {
     "platform": "youtube",
     "handle": "@Furo",
-    "owner": "xiong"
+    "owner": "xiong",
+    "all": true
   }
 ]

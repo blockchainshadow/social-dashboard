@@ -257,5 +257,11 @@
     "handle": "@LSTSOUNDS",
     "owner": "xiong",
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@Furo",
+    "owner": "xiong",
+    "all": true
   }
 ]
