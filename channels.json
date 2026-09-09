@@ -255,6 +255,7 @@
   {
     "platform": "youtube",
     "handle": "@LSTSOUNDS",
-    "owner": "xiong"
+    "owner": "xiong",
+    "all": true
   }
 ]

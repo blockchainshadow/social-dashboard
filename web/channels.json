@@ -251,5 +251,11 @@
     "handle": "@L_00x00",
     "owner": "xiong",
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@LSTSOUNDS",
+    "owner": "xiong",
+    "all": true
   }
 ]
