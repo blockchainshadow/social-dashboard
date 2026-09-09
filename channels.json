@@ -249,6 +249,7 @@
   {
     "platform": "youtube",
     "handle": "@L_00x00",
-    "owner": "xiong"
+    "owner": "xiong",
+    "all": true
   }
 ]
