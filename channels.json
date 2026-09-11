@@ -268,6 +268,7 @@
   {
     "platform": "youtube",
     "handle": "@CalmLofiRoom-l3s",
-    "owner": "xiong"
+    "owner": "xiong",
+    "all": true
   }
 ]

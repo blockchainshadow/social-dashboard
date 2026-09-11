@@ -19,7 +19,8 @@
       "油管"
     ],
     "alias": "矩阵游戏1",
-    "group": "游戏"
+    "group": "游戏",
+    "owner": "xiong"
   },
   {
     "platform": "youtube",
@@ -261,6 +262,12 @@
   {
     "platform": "youtube",
     "handle": "@Furo",
+    "owner": "xiong",
+    "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@CalmLofiRoom-l3s",
     "owner": "xiong",
     "all": true
   }
