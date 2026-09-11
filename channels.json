@@ -274,6 +274,7 @@
   {
     "platform": "youtube",
     "handle": "@NightfallSleep-v7y",
-    "owner": "xiong"
+    "owner": "xiong",
+    "all": true
   }
 ]
