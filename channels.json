@@ -314,5 +314,15 @@
       "音乐"
     ],
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@stefan_3d_ai",
+    "owner": "xiong",
+    "group": "游戏",
+    "tags": [
+      "游戏",
+      "AI"
+    ]
   }
 ]
