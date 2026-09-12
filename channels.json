@@ -325,5 +325,15 @@
       "AI"
     ],
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@GBXX_7",
+    "owner": "xiong",
+    "group": "游戏",
+    "tags": [
+      "游戏",
+      "AI"
+    ]
   }
 ]
