@@ -286,6 +286,7 @@
   {
     "platform": "youtube",
     "handle": "@chouchouhu",
-    "owner": "xiong"
+    "owner": "xiong",
+    "all": true
   }
 ]
