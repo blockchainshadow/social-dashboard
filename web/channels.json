@@ -16,7 +16,8 @@
     "all": true,
     "tags": [
       "恐怖游戏",
-      "油管"
+      "油管",
+      "公司"
     ],
     "alias": "矩阵游戏1",
     "group": "游戏",
@@ -287,6 +288,17 @@
     "platform": "youtube",
     "handle": "@chouchouhu",
     "owner": "xiong",
+    "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@MusicCans-007",
+    "owner": "xiong",
+    "group": "Lofi",
+    "tags": [
+      "Lofi",
+      "音乐"
+    ],
     "all": true
   }
 ]
