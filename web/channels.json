@@ -300,5 +300,16 @@
       "音乐"
     ],
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@hito7302",
+    "owner": "xiong",
+    "group": "Lofi",
+    "tags": [
+      "Lofi",
+      "音乐"
+    ],
+    "all": true
   }
 ]
