@@ -282,7 +282,10 @@
     "platform": "youtube",
     "handle": "@GuinevereScott-q4i",
     "owner": "xiong",
-    "all": true
+    "all": true,
+    "tags": [
+      "Lofi"
+    ]
   },
   {
     "platform": "youtube",
