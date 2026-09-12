@@ -289,5 +289,15 @@
     "handle": "@chouchouhu",
     "owner": "xiong",
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@MusicCans-007",
+    "owner": "xiong",
+    "group": "Lofi",
+    "tags": [
+      "Lofi",
+      "音乐"
+    ]
   }
 ]
