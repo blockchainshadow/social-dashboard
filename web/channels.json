@@ -282,7 +282,10 @@
     "platform": "youtube",
     "handle": "@GuinevereScott-q4i",
     "owner": "xiong",
-    "all": true
+    "all": true,
+    "tags": [
+      "Lofi"
+    ]
   },
   {
     "platform": "youtube",
@@ -309,6 +312,17 @@
     "tags": [
       "Lofi",
       "音乐"
+    ],
+    "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@stefan_3d_ai",
+    "owner": "xiong",
+    "group": "游戏",
+    "tags": [
+      "游戏",
+      "AI"
     ],
     "all": true
   }
