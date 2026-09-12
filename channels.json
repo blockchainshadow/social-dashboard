@@ -280,6 +280,7 @@
   {
     "platform": "youtube",
     "handle": "@GuinevereScott-q4i",
-    "owner": "xiong"
+    "owner": "xiong",
+    "all": true
   }
 ]
