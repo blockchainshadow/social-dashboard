@@ -336,5 +336,10 @@
       "AI"
     ],
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@AshaStories2025",
+    "owner": "xiong"
   }
 ]
