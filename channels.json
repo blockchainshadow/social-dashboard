@@ -340,6 +340,7 @@
   {
     "platform": "youtube",
     "handle": "@AshaStories2025",
-    "owner": "xiong"
+    "owner": "xiong",
+    "all": true
   }
 ]
