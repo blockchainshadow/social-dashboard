@@ -352,6 +352,7 @@
   {
     "platform": "youtube",
     "handle": "@wow.insight",
-    "owner": "xiong"
+    "owner": "xiong",
+    "all": true
   }
 ]
