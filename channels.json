@@ -346,6 +346,7 @@
   {
     "platform": "youtube",
     "handle": "@CarderyDev",
-    "owner": "xiong"
+    "owner": "xiong",
+    "all": true
   }
 ]
