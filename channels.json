@@ -348,5 +348,10 @@
     "handle": "@CarderyDev",
     "owner": "xiong",
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@wow.insight",
+    "owner": "xiong"
   }
 ]
