@@ -360,5 +360,15 @@
     "handle": "@科學漫聊",
     "owner": "xiong",
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@tryvoiceink",
+    "owner": "xiong",
+    "group": "产品",
+    "tags": [
+      "产品",
+      "Voiceink"
+    ]
   }
 ]
