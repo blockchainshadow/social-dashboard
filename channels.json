@@ -358,6 +358,7 @@
   {
     "platform": "youtube",
     "handle": "@科學漫聊",
-    "owner": "xiong"
+    "owner": "xiong",
+    "all": true
   }
 ]

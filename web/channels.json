@@ -354,5 +354,11 @@
     "handle": "@wow.insight",
     "owner": "xiong",
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@科學漫聊",
+    "owner": "xiong",
+    "all": true
   }
 ]
