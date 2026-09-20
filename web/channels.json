@@ -382,5 +382,15 @@
       "工作流"
     ],
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@xiao_lu_shuo",
+    "owner": "xiong",
+    "group": "网赚",
+    "tags": [
+      "网赚"
+    ],
+    "all": true
   }
 ]
