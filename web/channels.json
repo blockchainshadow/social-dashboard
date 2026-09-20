@@ -371,5 +371,16 @@
       "Voiceink"
     ],
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@AI钱太守",
+    "owner": "xiong",
+    "group": "AI",
+    "tags": [
+      "AI",
+      "工作流"
+    ],
+    "all": true
   }
 ]
