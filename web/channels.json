@@ -392,5 +392,17 @@
       "网赚"
     ],
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@genius_history01",
+    "owner": "xiong",
+    "group": "历史",
+    "tags": [
+      "历史",
+      "故事",
+      "动画"
+    ],
+    "all": true
   }
 ]
