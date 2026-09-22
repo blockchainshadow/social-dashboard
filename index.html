@@ -510,6 +510,8 @@ const hashtags = (t) => String(t).match(/#[\w\u4e00-\u9fa5]+/g) ?? [];
 // ---------- 加载（多平台合并） ----------
 const channels = {}; // "platform:handle" -> {platform, handle, info, records}
 let latestUpdated = 0;
+let apiOk = false;
+let staticMode = false;
 for (const [platform, file] of [["youtube", "youtube-history"], ["tiktok", "tiktok-history"]]) {
   try {
     const res = await fetch(`data/${file}.json?t=${Date.now()}`);
@@ -565,8 +567,6 @@ document.querySelectorAll("#range-seg button").forEach((b) => {
 });
 
 // ---------- 账号管理（仅本地服务模式下可用） ----------
-let apiOk = false;
-let staticMode = false;
 try {
   apiOk = (await fetch("/api/health")).ok;
 } catch {}
