@@ -4,5 +4,8 @@
   "description": "YouTube + TikTok 数据看板",
   "dependencies": {
     "playwright": "^1.62.1"
+  },
+  "devDependencies": {
+    "jsdom": "^30.1.1"
   }
 }
