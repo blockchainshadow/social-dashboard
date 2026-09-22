@@ -889,12 +889,13 @@ function rebuildChannelSelect(selectedKey) {
       container.label = g;
     }
     for (const k of keys) {
-      if (byKey[k]) container.appendChild(byKey[k]);
+      const ch = channels[k];
+      container.appendChild(byKey[k] || new Option(`${ch.platform === "youtube" ? "[YT]" : "[TT]"} ${ch.info?.alias || ch.info?.name || ch.handle}`, k));
     }
     if (container !== sel && container.children.length) sel.appendChild(container);
   }
   const fallback = visible.includes(prev) ? prev : visible[0];
-  if (fallback && byKey[fallback]) sel.value = fallback;
+  if (fallback) sel.value = fallback;
   return visible;
 }
 
