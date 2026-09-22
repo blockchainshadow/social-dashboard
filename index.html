@@ -901,7 +901,7 @@ function rebuildChannelSelect(selectedKey) {
 const onFilterChange = () => {
   const visible = rebuildChannelSelect();
   const cur = $("channel").value;
-  if (!visible.includes(cur) && visible.length) renderChannel(visible[0]);
+  if (visible.includes(cur) && cur !== currentKey) renderChannel(cur);
 };
 $("group-filter").onchange = onFilterChange;
 $("tag-filter").onchange = onFilterChange;
