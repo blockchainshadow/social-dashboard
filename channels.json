@@ -415,6 +415,11 @@
     "platform": "youtube",
     "handle": "@LootRegret",
     "owner": "zhou",
-    "all": true
+    "all": true,
+    "group": "游戏",
+    "tags": [
+      "公司",
+      "大火箭"
+    ]
   }
 ]
