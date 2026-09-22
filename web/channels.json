@@ -404,5 +404,17 @@
       "动画"
     ],
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@WastelandDiaries-w9s",
+    "owner": "zhou",
+    "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@LootRegret",
+    "owner": "zhou",
+    "all": true
   }
 ]

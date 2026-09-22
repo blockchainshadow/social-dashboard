@@ -408,11 +408,13 @@
   {
     "platform": "youtube",
     "handle": "@WastelandDiaries-w9s",
-    "owner": "zhou"
+    "owner": "zhou",
+    "all": true
   },
   {
     "platform": "youtube",
     "handle": "@LootRegret",
-    "owner": "zhou"
+    "owner": "zhou",
+    "all": true
   }
 ]
