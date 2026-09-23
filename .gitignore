@@ -13,5 +13,8 @@ not-quite-dead-web/
 scripts/_debug*.mjs
 *.log
 
+# 采集任务文件锁（运行时目录，绝不入库）
+.fetch-lock/
+
 # 系统文件
 .DS_Store

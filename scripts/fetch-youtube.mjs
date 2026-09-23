@@ -366,13 +366,21 @@ async function fetchRss(rssUrl) {
   return out;
 }
 
-// ---------- 头像本地化 ----------
+// ---------- 头像本地化（带 SSRF/磁盘防护：仅 http(s)、15s 超时、拒收文本、限 3MB） ----------
 export async function cacheAvatar(url, name) {
   try {
-    const res = await fetch(url, { headers: { "User-Agent": UA } });
+    const u = new URL(url);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    const res = await fetch(url, {
+      headers: { "User-Agent": UA },
+      signal: AbortSignal.timeout(15000),
+      redirect: "follow",
+    });
     if (!res.ok) return null;
+    const ct = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+    if (ct.startsWith("text/") || ct.includes("html")) return null;
     const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length < 100) return null;
+    if (buf.length < 100 || buf.length > 3_000_000) return null;
     await mkdir(AVATAR_DIR, { recursive: true });
     await writeFile(path.join(AVATAR_DIR, `${name}.jpg`), buf);
     return `avatars/${name}.jpg`;

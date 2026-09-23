@@ -487,6 +487,23 @@
 
 <script type="module">
 const $ = (id) => document.getElementById(id);
+
+// ---------- 本地服务鉴权：server.mjs 配置 DASH_TOKEN 后，浏览器自动附带口令 ----------
+const _fetch = window.fetch.bind(window);
+window.fetch = (input, init = {}) => {
+  const url = typeof input === "string" ? input : input.url;
+  if (typeof url === "string" && url.startsWith("/api/") && url !== "/api/health") {
+    const t = localStorage.getItem("dash-token");
+    if (t) init = { ...init, headers: { ...(init.headers || {}), Authorization: "Bearer " + t } };
+  }
+  return _fetch(input, init).then((res) => {
+    if (res.status === 401 && typeof url === "string" && url.startsWith("/api/")) {
+      const t = prompt("本地服务需要管理口令（服务端 DASH_TOKEN）：");
+      if (t) { localStorage.setItem("dash-token", t); location.reload(); }
+    }
+    return res;
+  });
+};
 const compact = new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 });
 const full = new Intl.NumberFormat("zh-CN");
 
@@ -506,6 +523,16 @@ const badge = (v) =>
   v == null ? "" :
   `<span class="badge ${v >= 0 ? "up" : "down"}">${v >= 0 ? "+" : ""}${compact.format(v)}</span>`;
 const hashtags = (t) => String(t).match(/#[\w\u4e00-\u9fa5]+/g) ?? [];
+
+// ---------- HTML 转义（防存储型 XSS：标题/备注/分组/标签/外链均来自外部数据） ----------
+const escHtml = (s) => String(s ?? "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+const escAttr = (s) => escHtml(s).replace(/`/g, "&#96;");
+const safeHttpUrl = (u, fallback = "#") => {
+  try {
+    const p = new URL(u, "https://placeholder.invalid");
+    return p.protocol === "http:" || p.protocol === "https:" ? u : fallback;
+  } catch { return fallback; }
+};
 
 // ---------- 加载（多平台合并） ----------
 const channels = {}; // "platform:handle" -> {platform, handle, info, records}
@@ -1000,9 +1027,9 @@ function renderProfile(platform, info, latest) {
   const ptag = platform === "youtube"
     ? '<span class="pill video">YouTube</span>'
     : '<span class="pill short">TikTok</span>';
-  const displayName = info.alias || info.name || "?";
+  const displayName = escHtml(info.alias || info.name || "?");
   const origName = info.alias && info.name && info.alias !== info.name
-    ? `<span class="orig-name">${info.name}</span>` : "";
+    ? `<span class="orig-name">${escHtml(info.name)}</span>` : "";
   $("p-name").innerHTML = `${displayName} ${ptag}${info.verified ? ' <span class="pill member">✔ 已认证</span>' : ""}${origName}`;
   const handleText = info.canonicalUrl?.replace(/^https?:\/\/(www\.)?(youtube\.com|tiktok\.com)\//, "") ?? "";
   $("p-handle").textContent = handleText;
@@ -1013,24 +1040,25 @@ function renderProfile(platform, info, latest) {
 
   const facts = [];
   if (latest?.channelVideoCount != null) facts.push(`视频总数 <b>${fmtF(latest.channelVideoCount)}</b>`);
-  if (info.joinedDate) facts.push(`加入时间 <b>${info.joinedDate.replaceAll("-", "/")}</b>`);
-  if (info.country) facts.push(`国家/地区 <b>${info.country}</b>`);
+  if (info.joinedDate) facts.push(`加入时间 <b>${escHtml(info.joinedDate.replaceAll("-", "/"))}</b>`);
+  if (info.country) facts.push(`国家/地区 <b>${escHtml(info.country)}</b>`);
   if (info.availableCountryCodes?.length) facts.push(`可用国家 <b>${info.availableCountryCodes.length}</b> 个`);
   if (info.isFamilySafe != null) facts.push(info.isFamilySafe ? "内容分级 <b>全年龄</b>" : "内容分级 <b>非全年龄</b>");
-  facts.push(`<span class="cid">${info.channelId ?? "?"}</span>`);
+  facts.push(`<span class="cid">${escHtml(info.channelId ?? "?")}</span>`);
   $("p-facts").innerHTML = facts.map((f) => `<div>${f}</div>`).join("");
 
   $("p-links").innerHTML =
-    (info.group ? `<span class="chip" style="color:var(--purple);background:rgba(167,139,250,.12);border-color:rgba(167,139,250,.35)">📁 ${info.group}</span>` : "") +
-    (info.tags ?? []).map((t) => `<span class="chip" style="color:var(--green);background:rgba(52,211,153,.1);border-color:rgba(52,211,153,.35)">#${t}</span>`).join("") +
+    (info.group ? `<span class="chip" style="color:var(--purple);background:rgba(167,139,250,.12);border-color:rgba(167,139,250,.35)">📁 ${escHtml(info.group)}</span>` : "") +
+    (info.tags ?? []).map((t) => `<span class="chip" style="color:var(--green);background:rgba(52,211,153,.1);border-color:rgba(52,211,153,.35)">#${escHtml(t)}</span>`).join("") +
     (info.links ?? [])
       .map((l) => {
-        const u = l.url && !/^[a-z][a-z0-9+.-]*:/i.test(l.url) ? "https://" + l.url : (l.url ?? "#");
-        return `<a class="chip" href="${u}" target="_blank" rel="noopener">🔗 ${l.title ?? l.url}</a>`;
+        const raw = l.url && !/^[a-z][a-z0-9+.-]*:/i.test(l.url) ? "https://" + l.url : (l.url ?? "#");
+        const u = escAttr(safeHttpUrl(raw));
+        return `<a class="chip" href="${u}" target="_blank" rel="noopener">🔗 ${escHtml(l.title ?? l.url)}</a>`;
       })
       .join("");
   $("p-keywords").innerHTML = (info.keywords ?? [])
-    .map((k) => `<span class="chip kw">${k}</span>`)
+    .map((k) => `<span class="chip kw">${escHtml(k)}</span>`)
     .join("");
 
   // 备注/分组编辑（仅本地服务模式）
@@ -1324,10 +1352,14 @@ function renderTable() {
         : ((a[sortKey] ?? -Infinity) < (b[sortKey] ?? -Infinity) ? -1 : 1) * sortDir
   );
   $("tbody").innerHTML = rows.length
-    ? rows.map((r, i) => `
+    ? rows.map((r, i) => {
+      const vTitle = escHtml(r.title || r.id);
+      const vUrl = escAttr(safeHttpUrl(r.url));
+      const vThumb = escAttr(safeHttpUrl(r.thumb, ""));
+      return `
       <tr>
         <td>${i + 1}</td>
-        <td><div class="vtitle"><img loading="lazy" src="${r.thumb}" alt="" /><span title="${r.title}"><a href="${r.url}" target="_blank" rel="noopener">${r.title || r.id}</a></span></div></td>
+        <td><div class="vtitle"><img loading="lazy" src="${vThumb}" alt="" /><span title="${escAttr(r.title || r.id)}"><a href="${vUrl}" target="_blank" rel="noopener">${vTitle}</a></span></div></td>
         <td><span class="pill ${r.shorts ? "short" : "video"}">${r.shorts ? "Short" : "Video"}</span></td>
         <td>${fmtDT(r)}</td>
         <td class="num">${fmtDur(r.durationSec)}</td>
@@ -1344,7 +1376,7 @@ function renderTable() {
         <td class="num">${r.shares == null ? '<span class="hint">–</span>' : fmtF(r.shares)}</td>
         <td class="num">${r.engagement == null ? '<span class="hint">–</span>' : r.engagement.toFixed(2) + "%"}</td>
         <td class="num">${r.descriptionChars ?? '<span class="hint">–</span>'}</td>
-      </tr>`).join("")
+      </tr>`; }).join("")
     : `<tr><td colspan="12" style="color:var(--muted)">无匹配结果</td></tr>`;
   document.querySelectorAll("th[data-k]").forEach((th) => {
     th.querySelector(".arrow")?.remove();

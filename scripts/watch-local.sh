@@ -1,6 +1,7 @@
 #!/bin/bash
 # 每 2 分钟：补采新增频道并推送（与每日任务经文件锁互斥，锁空闲即插队执行）
-cd "/Users/x/Documents/Default Project" || exit 1
+# 定位仓库根（脚本所在目录的上级），不依赖硬编码绝对路径
+cd "$(dirname "$0")/.." || exit 1
 LOG=logs/watch.log
 if ! mkdir .fetch-lock 2>/dev/null; then
   if [ -n "$(find .fetch-lock -maxdepth 0 -mmin +15 2>/dev/null)" ]; then

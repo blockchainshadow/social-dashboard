@@ -12,6 +12,20 @@ const MODS = { youtube: yt, tiktok: tt };
 const ROOT = process.cwd();
 const CONFIG_FILE = path.resolve("channels.json");
 const PORT = Number(process.argv[2] ?? process.env.PORT ?? 8000);
+// 安全默认值：只绑回环。如需局域网/公网访问，必须显式设置 HOST 并配置 DASH_TOKEN
+const HOST = process.env.HOST ?? "127.0.0.1";
+const ADMIN_TOKEN = process.env.DASH_TOKEN ?? "";
+const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost"]);
+if (!LOOPBACK.has(HOST) && !ADMIN_TOKEN) {
+  console.error(`拒绝启动：HOST=${HOST} 为非回环地址，但未设置 DASH_TOKEN。本地 API 无鉴权，公网暴露可被任意读写数据。`);
+  console.error("如确需远程访问，请设置 DASH_TOKEN 环境变量后再启动，浏览器会在 401 时提示输入口令。");
+  process.exit(1);
+}
+function authorized(req) {
+  if (LOOPBACK.has(HOST)) return true; // 单机回环默认可信
+  const h = req.headers.authorization ?? "";
+  return !!ADMIN_TOKEN && h === `Bearer ${ADMIN_TOKEN}`;
+}
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -35,8 +49,13 @@ const sendJson = (res, code, obj) => send(res, code, JSON.stringify(obj));
 async function serveStatic(req, res, urlPath) {
   let rel = decodeURIComponent(urlPath.split("?")[0]);
   if (rel === "/" || rel === "") rel = "/web/index.html";
+  // 仅放行看板本身需要的文件：禁点文件、服务端源码与运行产物目录
+  const DENY = ["/.git/", "/.fetch-lock/", "/server.mjs", "/scripts/", "/tools/", "/tests/", "/.venv/", "/logs/", "/backups/", "/output/", "/package.json", "/package-lock.json"];
+  if (DENY.some((p) => rel === p.replace(/\/$/, "") || rel.startsWith(p))) {
+    return sendJson(res, 404, { error: "not found" });
+  }
   let filePath = path.resolve(path.join(ROOT, rel));
-  if (!filePath.startsWith(ROOT)) return sendJson(res, 403, { error: "forbidden" });
+  if (filePath !== ROOT && !filePath.startsWith(ROOT + path.sep)) return sendJson(res, 403, { error: "forbidden" });
   try {
     let buf;
     try {
@@ -59,17 +78,26 @@ async function serveStatic(req, res, urlPath) {
   }
 }
 
-async function readBody(req) {
+async function readBody(req, maxBytes = 1_000_000) {
   return new Promise((resolve) => {
-    let d = "";
-    req.on("data", (c) => (d += c));
+    let size = 0;
+    const chunks = [];
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; resolve(v); } };
+    req.on("data", (c) => {
+      size += c.length;
+      // 超限后继续读完但丢弃（保证能正常回 413，而非直接断连）
+      if (size <= maxBytes) chunks.push(c);
+    });
     req.on("end", () => {
+      if (size > maxBytes) return finish(null); // 调用方返回 413
       try {
-        resolve(JSON.parse(d || "{}"));
+        finish(JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}"));
       } catch {
-        resolve({});
+        finish({});
       }
     });
+    req.on("error", () => finish({}));
   });
 }
 
@@ -129,6 +157,9 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   try {
     if (url.pathname === "/api/health") return sendJson(res, 200, { ok: true });
+    // 健康检查之外所有 API 均需鉴权（回环默认放行，非回环需 Bearer DASH_TOKEN）
+    if (url.pathname.startsWith("/api/") && !authorized(req))
+      return sendJson(res, 401, { error: "unauthorized：需提供 DASH_TOKEN" });
 
     if (url.pathname === "/api/channels" && req.method === "GET") {
       return send(res, 200, await readFile(CONFIG_FILE, "utf8"));
@@ -137,6 +168,7 @@ const server = http.createServer(async (req, res) => {
     // 添加账号 {handle, platform, all}
     if (url.pathname === "/api/channels" && req.method === "POST") {
       const body = await readBody(req);
+      if (!body) return sendJson(res, 413, { error: "请求体过大（上限 1MB）" });
       const platform = body.platform === "tiktok" ? "tiktok" : "youtube";
       const handle = normalizeHandle(platform, body.handle);
       if (!handle) return sendJson(res, 400, { error: "请输入有效的账号 handle、主页链接或频道 ID" });
@@ -159,6 +191,7 @@ const server = http.createServer(async (req, res) => {
     // 更新备注名/分组 {handle, platform, alias, group}（留空即清除）
     if (url.pathname === "/api/channel-meta" && req.method === "POST") {
       const body = await readBody(req);
+      if (!body) return sendJson(res, 413, { error: "请求体过大（上限 1MB）" });
       const platform = body.platform === "tiktok" ? "tiktok" : "youtube";
       const handle = normalizeHandle(platform, body.handle);
       const config = await readFile(CONFIG_FILE, "utf8").then(JSON.parse);
@@ -219,6 +252,7 @@ const server = http.createServer(async (req, res) => {
     // 刷新单个账号 {handle, platform}
     if (url.pathname === "/api/refresh" && req.method === "POST") {
       const body = await readBody(req);
+      if (!body) return sendJson(res, 413, { error: "请求体过大（上限 1MB）" });
       const platform = body.platform === "tiktok" ? "tiktok" : "youtube";
       const handle = normalizeHandle(platform, body.handle);
       const config = await readFile(CONFIG_FILE, "utf8").then(JSON.parse);
@@ -239,7 +273,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`看板服务已启动: http://localhost:${PORT}/web/`);
+server.listen(PORT, HOST, () => {
+  console.log(`看板服务已启动: http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}/web/${LOOPBACK.has(HOST) ? "（仅本机可访问）" : "（已启用 DASH_TOKEN 鉴权）"}`);
   console.log("API: POST /api/channels {handle, platform, all} | DELETE /api/channels/{platform}/{handle} | POST /api/refresh");
 });
