@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>社交平台数据看板 · 系统架构拓扑</title>
+<style>
+  :root { --bg:#0e1014; --panel:#161920; --border:#262b36; --text:#e8eaf0; --muted:#8b93a7;
+    --accent:#4f8cff; --green:#34d399; --amber:#f59e0b; --purple:#a78bfa; --red:#f87171; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,"PingFang SC","Segoe UI",Roboto,sans-serif; font-size:14px; line-height:1.6; }
+  .wrap { max-width:1520px; margin:0 auto; padding:24px 28px 60px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:16px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px 20px; margin-bottom:16px; }
+  svg { width:100%; height:auto; display:block; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th,td { border:1px solid var(--border); padding:8px 10px; text-align:left; vertical-align:top; }
+  th { background:#1c202a; }
+  code { background:#0d1117; border:1px solid var(--border); border-radius:6px; padding:1px 6px; font-size:12.5px; }
+  .legend span { display:inline-block; margin-right:18px; color:var(--muted); font-size:13px; }
+  .note { color:var(--muted); font-size:12.5px; }
+  .ok { color:var(--green); } .warn { color:var(--amber); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>社交平台数据看板 · 系统架构拓扑</h1>
+  <div class="sub">数据流向：数据源 → 本机采集 → 存储（R2 / Git）→ 三处 serving → 浏览器 · 更新于 2026-09-24 · 免费额度内（R2 0.96% · $0）</div>
+
+  <div class="card">
+  <svg viewBox="0 0 1500 940" font-family="-apple-system,PingFang SC,Segoe UI,Roboto,sans-serif" font-size="12.5">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#4f8cff"/>
+      </marker>
+      <marker id="arg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#34d399"/>
+      </marker>
+      <marker id="ard" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#8b93a7"/>
+      </marker>
+    </defs>
+
+    <!-- ===== 列标题 ===== -->
+    <text x="130" y="28" fill="#8b93a7" font-size="13">① 数据源</text>
+    <text x="450" y="28" fill="#8b93a7" font-size="13">② 采集层 · 本机 Mac（cron）</text>
+    <text x="830" y="28" fill="#8b93a7" font-size="13">③ 存储层</text>
+    <text x="1150" y="28" fill="#8b93a7" font-size="13">④ 服务层 → ⑤ 浏览器</text>
+
+    <!-- ===== ① 数据源 ===== -->
+    <rect x="20" y="45" width="220" height="120" rx="10" fill="#161920" stroke="#262b36"/>
+    <text x="34" y="70" fill="#e8eaf0" font-weight="600">YouTube 公开页</text>
+    <text x="34" y="90" fill="#8b93a7">innertube 翻页 / RSS</text>
+    <text x="34" y="108" fill="#8b93a7">about 页档案数据</text>
+    <text x="34" y="126" fill="#8b93a7">头像原图（SSRF 防护）</text>
+    <text x="34" y="148" fill="#4f8cff">工具：node fetch（零依赖）</text>
+
+    <rect x="20" y="180" width="220" height="130" rx="10" fill="#161920" stroke="#262b36"/>
+    <text x="34" y="205" fill="#e8eaf0" font-weight="600">TikTok 公开页</text>
+    <text x="34" y="225" fill="#8b93a7">① 页面内嵌 JSON 直抓</text>
+    <text x="34" y="243" fill="#8b93a7">② Jina Reader 渲染代理</text>
+    <text x="34" y="261" fill="#8b93a7">③ Playwright 无头 Chromium</text>
+    <text x="34" y="283" fill="#8b93a7">（WAF 挑战，只能拿档案级）</text>
+    <text x="34" y="301" fill="#4f8cff">工具：playwright（兜底）</text>
+
+    <!-- ===== ② 采集层 ===== -->
+    <rect x="280" y="45" width="280" height="200" rx="10" fill="#161920" stroke="#4f8cff"/>
+    <text x="294" y="70" fill="#e8eaf0" font-weight="600">定时任务 · cron（本机）</text>
+    <text x="294" y="92" fill="#e8eaf0">watch-local.sh <tspan fill="#8b93a7">每 2 分钟</tspan></text>
+    <text x="294" y="110" fill="#8b93a7">└ 新频道补采 → 直推 R2</text>
+    <text x="294" y="132" fill="#e8eaf0">daily-local.sh <tspan fill="#8b93a7">每天 3:00</tspan></text>
+    <text x="294" y="150" fill="#8b93a7">└ 全量逐频道 → 跑完推一次 R2</text>
+    <text x="294" y="172" fill="#e8eaf0">fetch-cf-usage <tspan fill="#8b93a7">每小时 :17</tspan></text>
+    <text x="294" y="190" fill="#8b93a7">└ 用量 → cf-usage.json → R2</text>
+    <text x="294" y="212" fill="#8b93a7">互斥锁 .fetch-lock（15min 逃逸）</text>
+    <text x="294" y="230" fill="#4f8cff">工具：cron + node22</text>
+
+    <rect x="280" y="260" width="280" height="170" rx="10" fill="#161920" stroke="#262b36"/>
+    <text x="294" y="285" fill="#e8eaf0" font-weight="600">采集脚本 · scripts/</text>
+    <text x="294" y="307" fill="#e8eaf0">fetch-youtube.mjs</text>
+    <text x="294" y="325" fill="#8b93a7">└ 精确抓前 N 视频 / 近似补全</text>
+    <text x="294" y="347" fill="#e8eaf0">fetch-tiktok.mjs</text>
+    <text x="294" y="365" fill="#8b93a7">└ 档案级（粉丝/获赞/头像）</text>
+    <text x="294" y="387" fill="#e8eaf0">publish-r2.sh <tspan fill="#8b93a7">增量</tspan></text>
+    <text x="294" y="405" fill="#8b93a7">└ hash 未变跳过（空闲 0.2s）</text>
+    <text x="294" y="423" fill="#4f8cff">工具：wrangler（OAuth 免密钥）</text>
+
+    <rect x="280" y="445" width="280" height="120" rx="10" fill="#161920" stroke="#262b36"/>
+    <text x="294" y="470" fill="#e8eaf0" font-weight="600">本地管理服务</text>
+    <text x="294" y="492" fill="#e8eaf0">server.mjs <tspan fill="#8b93a7">127.0.0.1:8000</tspan></text>
+    <text x="294" y="510" fill="#8b93a7">POST /api/channels（加号）</text>
+    <text x="294" y="528" fill="#8b93a7">POST /api/refresh · DELETE…</text>
+    <text x="294" y="550" fill="#8b93a7">非回环需 DASH_TOKEN 鉴权</text>
+
+    <rect x="280" y="580" width="280" height="90" rx="10" fill="#161920" stroke="#262b36"/>
+    <text x="294" y="605" fill="#e8eaf0" font-weight="600">本地文件（构建产物）</text>
+    <text x="294" y="627" fill="#8b93a7">data/*.json · avatars/ · logs/</text>
+    <text x="294" y="645" fill="#8b93a7">backups/（30 天滚动）</text>
+    <text x="294" y="663" fill="#4f8cff">工具：sync-static.sh（镜像）</text>
+
+    <!-- ===== ③ 存储层 ===== -->
+    <rect x="600" y="45" width="280" height="220" rx="10" fill="#161920" stroke="#34d399"/>
+    <text x="614" y="70" fill="#e8eaf0" font-weight="600">Cloudflare R2 · 真数据源 ☁️</text>
+    <text x="614" y="92" fill="#e8eaf0">social-dashboard-data</text>
+    <text x="614" y="114" fill="#8b93a7">data/youtube-history.json · 93M</text>
+    <text x="614" y="132" fill="#8b93a7">avatars/*.jpg · 54 个 · 5M</text>
+    <text x="614" y="150" fill="#8b93a7">channels.json · users.json</text>
+    <text x="614" y="168" fill="#8b93a7">cf-usage.json · 用量快照</text>
+    <text x="614" y="190" fill="#34d399">公读 r2.dev + CORS *</text>
+    <text x="614" y="208" fill="#34d399">总量 0.096G / 免费 10G</text>
+    <text x="614" y="230" fill="#34d399">流出免费 · 无 single 25M 限制</text>
+    <text x="614" y="252" fill="#4f8cff">工具：wrangler r2 object put</text>
+
+    <rect x="600" y="280" width="280" height="200" rx="10" fill="#161920" stroke="#262b36"/>
+    <text x="614" y="305" fill="#e8eaf0" font-weight="600">GitHub 仓库 · 只留小文件</text>
+    <text x="614" y="327" fill="#e8eaf0">blockchainshadow/… · main</text>
+    <text x="614" y="349" fill="#8b93a7">index.html · web/ · scripts/</text>
+    <text x="614" y="367" fill="#8b93a7">channels.json · 头像（5M）</text>
+    <text x="614" y="389" fill="#8b93a7">🚫 93M 快照已移出（ignore）</text>
+    <text x="614" y="407" fill="#8b93a7">历史 .git 2.4G（只增不减）</text>
+    <text x="614" y="429" fill="#8b93a7">cron 只提交配置/小文件</text>
+    <text x="614" y="451" fill="#8b93a7">v1.0a 浮动 tag（快照标记）</text>
+    <text x="614" y="473" fill="#4f8cff">工具：git · gh CLI</text>
+
+    <rect x="600" y="495" width="280" height="110" rx="10" fill="#161920" stroke="#262b36"/>
+    <text x="614" y="520" fill="#e8eaf0" font-weight="600">用量监控回路</text>
+    <text x="614" y="542" fill="#8b93a7">GraphQL Analytics API</text>
+    <text x="614" y="560" fill="#8b93a7">r2Ops / r2Storage / workers</text>
+    <text x="614" y="578" fill="#8b93a7">→ cf-usage.json → R2 → 顶栏徽标</text>
+    <text x="614" y="596" fill="#4f8cff">工具：fetch-cf-usage.mjs</text>
+
+    <!-- ===== ④⑤ 服务与用户 ===== -->
+    <rect x="920" y="45" width="250" height="150" rx="10" fill="#161920" stroke="#a78bfa"/>
+    <text x="934" y="70" fill="#e8eaf0" font-weight="600">Cloudflare Pages · 主站</text>
+    <text x="934" y="92" fill="#8b93a7">social-dashboard-9ya…</text>
+    <text x="934" y="110" fill="#8b93a7">Git 连接 → push 自动构建</text>
+    <text x="934" y="128" fill="#8b93a7">无构建命令 · 输出 / · 纯静态</text>
+    <text x="934" y="146" fill="#8b93a7">只读（无 /api 后端）</text>
+    <text x="934" y="168" fill="#34d399">单文件 ≤25M（故数据放 R2）</text>
+    <text x="934" y="186" fill="#4f8cff">工具：wrangler pages</text>
+
+    <rect x="920" y="210" width="250" height="120" rx="10" fill="#161920" stroke="#262b36"/>
+    <text x="934" y="235" fill="#e8eaf0" font-weight="600">GitHub Pages · 备用</text>
+    <text x="934" y="257" fill="#8b93a7">…github.io/social-dashboard/</text>
+    <text x="934" y="275" fill="#8b93a7">同读 R2（默认数据源已切）</text>
+    <text x="934" y="293" fill="#8b93a7">与主站内容一致，互备</text>
+    <text x="934" y="315" fill="#4f8cff">管理：仓库 Settings → Pages</text>
+
+    <rect x="1210" y="45" width="270" height="285" rx="10" fill="#161920" stroke="#f59e0b"/>
+    <text x="1224" y="70" fill="#e8eaf0" font-weight="600">浏览器 · 三种模式 👥</text>
+    <text x="1224" y="94" fill="#e8eaf0">A 本地服务（管理）</text>
+    <text x="1224" y="112" fill="#8b93a7">127.0.0.1:8000 · /api 可写</text>
+    <text x="1224" y="130" fill="#8b93a7">admin/member · 加号/删/刷</text>
+    <text x="1224" y="152" fill="#e8eaf0">B 静态站（日常看）</text>
+    <text x="1224" y="170" fill="#8b93a7">Pages / GH Pages · 纯读 R2</text>
+    <text x="1224" y="188" fill="#8b93a7">管理菜单自动隐藏</text>
+    <text x="1224" y="210" fill="#e8eaf0">C 调试覆盖</text>
+    <text x="1224" y="228" fill="#8b93a7">?data=临时切源 · 顶栏 ☁️ 徽标</text>
+    <text x="1224" y="246" fill="#8b93a7">悬停看限额明细 · 80% 黄 90% 红</text>
+    <text x="1224" y="268" fill="#8b93a7">首次打开需下载 93M（约半分钟）</text>
+    <text x="1224" y="290" fill="#8b93a7">admin 记得点 🌍 全员看全部</text>
+    <text x="1224" y="312" fill="#4f8cff">覆盖：localStorage dash-data-base</text>
+
+    <!-- ===== 连线 ===== -->
+    <!-- 源 → 采集 -->
+    <line x1="240" y1="100" x2="278" y2="140" stroke="#4f8cff" stroke-width="1.6" marker-end="url(#ar)"/>
+    <text x="243" y="112" fill="#4f8cff" font-size="11">HTTPS 抓取</text>
+    <line x1="240" y1="240" x2="278" y2="330" stroke="#4f8cff" stroke-width="1.6" marker-end="url(#ar)"/>
+    <text x="243" y="292" fill="#4f8cff" font-size="11">直抓/Jina/无头</text>
+    <!-- 采集 → R2 -->
+    <line x1="560" y1="150" x2="598" y2="130" stroke="#34d399" stroke-width="2" marker-end="url(#arg)"/>
+    <text x="505" y="110" fill="#34d399" font-size="11">put（增量）</text>
+    <line x1="560" y1="395" x2="598" y2="200" stroke="#34d399" stroke-width="1.4" marker-end="url(#arg)"/>
+    <!-- 采集 → Git -->
+    <line x1="560" y1="420" x2="598" y2="400" stroke="#4f8cff" stroke-width="1.6" marker-end="url(#ar)"/>
+    <text x="505" y="425" fill="#4f8cff" font-size="11">push（小文件）</text>
+    <!-- 本地文件 → R2/Git 注解 -->
+    <line x1="420" y1="580" x2="640" y2="265" stroke="#8b93a7" stroke-width="1" stroke-dasharray="5 4" marker-end="url(#ard)"/>
+    <text x="470" y="430" fill="#8b93a7" font-size="11">构建产物 ↔</text>
+    <!-- R2 → 浏览器 -->
+    <line x1="880" y1="120" x2="1208" y2="150" stroke="#34d399" stroke-width="2" marker-end="url(#arg)"/>
+    <text x="900" y="110" fill="#34d399" font-size="11">公读 93M（CORS *）</text>
+    <!-- Git → Pages/GH -->
+    <line x1="880" y1="330" x2="918" y2="120" stroke="#a78bfa" stroke-width="1.6" marker-end="url(#ar)"/>
+    <text x="883" y="230" fill="#a78bfa" font-size="11">自动构建</text>
+    <line x1="880" y1="360" x2="918" y2="270" stroke="#8b93a7" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ard)"/>
+    <text x="883" y="325" fill="#8b93a7" font-size="11">legacy 构建</text>
+    <!-- 本地服务 → 浏览器 -->
+    <line x1="560" y1="500" x2="1208" y2="130" stroke="#4f8cff" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ard)"/>
+    <text x="750" y="300" fill="#4f8cff" font-size="11">/api（管理写）</text>
+    <!-- 用量回路 -->
+    <line x1="740" y1="540" x2="598" y2="540" stroke="#8b93a7" stroke-width="1" stroke-dasharray="5 4" marker-end="url(#ard)"/>
+    <text x="640" y="530" fill="#8b93a7" font-size="11">GraphQL 拉量</text>
+    <line x1="880" y1="560" x2="1208" y2="240" stroke="#8b93a7" stroke-width="1" stroke-dasharray="5 4" marker-end="url(#ard)"/>
+    <text x="960" y="420" fill="#8b93a7" font-size="11">cf-usage.json → 徽标</text>
+
+    <!-- ===== 图例 ===== -->
+    <text x="20" y="700" fill="#8b93a7" font-size="12.5">图例：</text>
+    <line x1="70" y1="696" x2="110" y2="696" stroke="#4f8cff" stroke-width="1.6" marker-end="url(#ar)"/>
+    <text x="118" y="700" fill="#8b93a7" font-size="12.5">控制/代码同步</text>
+    <line x1="230" y1="696" x2="270" y2="696" stroke="#34d399" stroke-width="2" marker-end="url(#arg)"/>
+    <text x="278" y="700" fill="#8b93a7" font-size="12.5">数据主链路（R2）</text>
+    <line x1="420" y1="696" x2="460" y2="696" stroke="#8b93a7" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ard)"/>
+    <text x="468" y="700" fill="#8b93a7" font-size="12.5">备用/只读/回读</text>
+  </svg>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 8px;font-size:15px">工具总览（按链路）</h3>
+    <table>
+      <tr><th>环节</th><th>工具</th><th>频率 / 体积</th><th>备注</th></tr>
+      <tr><td>定时调度</td><td><code>cron</code>（本机）</td><td>watch 2min · daily 3:00 · usage :17</td><td><code>crontab -l</code> 可查；<code>.fetch-lock</code> 互斥</td></tr>
+      <tr><td>YT 采集</td><td><code>node</code> + <code>fetch-youtube.mjs</code>（零依赖 fetch）</td><td>逐频道；前 N 视频精确、其余近似</td><td>innertube 翻页 + RSS 校准发布时间</td></tr>
+      <tr><td>TT 采集</td><td><code>fetch-tiktok.mjs</code> → 直抓 / <code>Jina Reader</code> 代理 / <code>playwright</code> 无头</td><td>档案级（WAF 限制）</td><td><code>tiktok_sidecar.py</code> 辅助</td></tr>
+      <tr><td>发布到 R2</td><td><code>wrangler r2 object put</code>（OAuth，免密钥）+ <code>publish-r2.sh</code></td><td>增量：hash 未变 0.2s 跳过；93M 全传约 1 分钟</td><td>CORS <code>*</code>；r2.dev 生产限速但几个人够用</td></tr>
+      <tr><td>版本控制</td><td><code>git</code> + <code>gh</code></td><td>只提交配置/代码/头像；93M 已 ignore</td><td>.git 历史 2.4G（clone 用 <code>--depth 1</code>）</td></tr>
+      <tr><td>静态托管</td><td><code>Cloudflare Pages</code>（Git 自动构建）+ <code>GitHub Pages</code>（备用）</td><td>push 即上线；单文件 25M 上限故数据放 R2</td><td>纯静态只读；管理回本地 :8000</td></tr>
+      <tr><td>本地服务</td><td><code>server.mjs</code>（零依赖 http）</td><td>127.0.0.1:8000；<code>/api/*</code> 增删改查</td><td>非回环需 <code>DASH_TOKEN</code></td></tr>
+      <tr><td>用量监控</td><td><code>fetch-cf-usage.mjs</code> → GraphQL Analytics</td><td>每小时；R2 0.096G(0.96%) · $0</td><td>顶栏 ☁️ 徽标：绿 &lt;80% · 黄 80% · 红 90%</td></tr>
+      <tr><td>测试</td><td><code>jsdom</code>（tests/）</td><td>—</td><td>与线上链路无关</td></tr>
+    </table>
+    <p class="note">免费额度红线：R2 10G 存储 / A 类 100 万 / B 类 1000 万 / Workers 日 10 万 / Pages 构建 500 次月。目前用量全部 &lt;1%，瓶颈只在 r2.dev 公网限速（人多后换自定义域）与 93M 首屏下载（人多后拆包）。密钥面：wrangler OAuth 存本机（cron 同用户复用），R2 公读无密钥，前端零密钥。</p>
+  </div>
+</div>
+</body>
+</html>
