@@ -2,6 +2,9 @@
 # 每 2 分钟：补采新增频道并推送（与每日任务经文件锁互斥，锁空闲即插队执行）
 # 定位仓库根（脚本所在目录的上级），不依赖硬编码绝对路径
 cd "$(dirname "$0")/.." || exit 1
+export PATH="$HOME/.nvm/versions/node/v22.14.0/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+# node 解析：cron 下 PATH 极简，先找 PATH，再找 nvm，最后回退旧路径
+NODE_BIN="${NODE_BIN:-$(command -v node 2>/dev/null || echo "$HOME/.nvm/versions/node/v22.14.0/bin/node")}"
 LOG=logs/watch.log
 if ! mkdir .fetch-lock 2>/dev/null; then
   if [ -n "$(find .fetch-lock -maxdepth 0 -mmin +15 2>/dev/null)" ]; then
@@ -14,9 +17,9 @@ echo $$ > .fetch-lock/pid
 trap 'rm -rf .fetch-lock' EXIT
 echo "[$(date '+%F %T')] === watch 开始 ===" >> "$LOG"
 git pull --rebase --autostash origin main >> "$LOG" 2>&1 || echo "[$(date '+%F %T')] pull 失败，继续用本地" >> "$LOG"
-/Users/x/.local/bin/node scripts/watch-new-channels.mjs >> "$LOG" 2>&1
+"$NODE_BIN" scripts/watch-new-channels.mjs >> "$LOG" 2>&1
 bash scripts/sync-static.sh
-if ! /Users/x/.local/bin/node -e "JSON.parse(require('fs').readFileSync('channels.json','utf8'));JSON.parse(require('fs').readFileSync('data/youtube-history.json','utf8'))" 2>> "$LOG"; then
+if ! "$NODE_BIN" -e "JSON.parse(require('fs').readFileSync('channels.json','utf8'));JSON.parse(require('fs').readFileSync('data/youtube-history.json','utf8'))" 2>> "$LOG"; then
   echo "[$(date '+%F %T')] JSON 校验失败，跳过（防止冲突标记入库）" >> "$LOG"
   git rebase --abort 2>/dev/null
   exit 0

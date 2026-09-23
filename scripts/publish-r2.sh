@@ -6,6 +6,8 @@
 # 前提：同一用户跑过一次 `wrangler login`（token 持久在本地，可过 cron）
 # 输出全走 stdout，调用方自行 >> "$LOG" 2>&1
 cd "$(dirname "$0")/.." || exit 1
+# cron 下 PATH 极简，先补 node/wrangler 所在目录（wrangler 自身也是 node 脚本，靠 env 找 node）
+export PATH="$HOME/.nvm/versions/node/v22.14.0/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 R2_BUCKET="${R2_BUCKET:-social-dashboard-data}"
 WRANGLER_BIN="${WRANGLER_BIN:-$(command -v wrangler 2>/dev/null || echo "$HOME/.nvm/versions/node/v22.14.0/bin/wrangler")}"
 FULL=0

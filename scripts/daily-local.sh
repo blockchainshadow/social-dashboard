@@ -2,7 +2,8 @@
 # YouTube 每日采集：每频道独立提交推送（与 watch 任务经文件锁互斥，新增频道不再排队）
 # 定位仓库根（脚本所在目录的上级），不依赖硬编码绝对路径
 cd "$(dirname "$0")/.." || exit 1
-NODE_BIN="${NODE_BIN:-/Users/x/.local/bin/node}"
+export PATH="$HOME/.nvm/versions/node/v22.14.0/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+NODE_BIN="${NODE_BIN:-$(command -v node 2>/dev/null || echo "$HOME/.nvm/versions/node/v22.14.0/bin/node")}"
 LOG=logs/youtube-daily.log
 mkdir -p logs backups
 
