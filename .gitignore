@@ -16,9 +16,10 @@ scripts/_debug*.mjs
 # 采集任务文件锁（运行时目录，绝不入库）
 .fetch-lock/
 
-# 大快照走 R2（仓库只留代码、配置与头像）
+# 大快照与用量走 R2（仓库只留代码、配置与头像）
 data/youtube-history.json
 web/data/youtube-history.json
+data/cf-usage.json
 
 # 系统文件
 .DS_Store

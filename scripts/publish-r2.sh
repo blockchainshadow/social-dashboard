@@ -22,13 +22,14 @@ filehash() { cat "$@" 2>/dev/null | (md5sum 2>/dev/null || md5 2>/dev/null) | gr
 echo "[$(date '+%F %T')] publish-r2 开始 (bucket=${R2_BUCKET})"
 mkdir -p logs
 HASH_FILE="logs/.publish-r2-hash"
-CUR=$(filehash data/youtube-history.json channels.json users.json)
+CUR=$(filehash data/youtube-history.json channels.json users.json data/cf-usage.json)
 if [ "$FULL" = 0 ] && [ -n "$CUR" ] && [ -f "$HASH_FILE" ] && [ "$CUR" = "$(cat "$HASH_FILE" 2>/dev/null)" ]; then
   echo "  json 未变更，跳过上传"
 else
   [ -f data/youtube-history.json ] && { put data/youtube-history.json data/youtube-history.json "application/json; charset=utf-8" && echo "  json ok" || echo "  json FAIL"; }
   [ -f channels.json ] && { put channels.json channels.json "application/json; charset=utf-8" && echo "  channels ok" || echo "  channels FAIL"; }
   [ -f users.json ] && { put users.json users.json "application/json; charset=utf-8" && echo "  users ok" || echo "  users FAIL"; }
+  [ -f data/cf-usage.json ] && { put data/cf-usage.json cf-usage.json "application/json; charset=utf-8" && echo "  usage ok" || echo "  usage FAIL"; }
   [ -n "$CUR" ] && echo "$CUR" > "$HASH_FILE"
 fi
 
