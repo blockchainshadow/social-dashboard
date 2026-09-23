@@ -595,8 +595,10 @@ $("updated-at").textContent = `更新于 ${new Date(latestUpdated).toLocaleStrin
       u.r2.classB / u.r2.classBLimit,
       u.workers.requestsToday / u.workers.limit
     );
-    el.textContent = `☁️ ${u.r2.storageGB}G · ${u.r2.objects}对象 · $${u.billing.billableUSD}`;
-    el.title = `R2 存储 ${u.r2.storageGB}/${u.r2.storageLimitGB}GB · 对象 ${u.r2.objects} · A类 ${u.r2.classA}/100万 · B类 ${u.r2.classB}/1000万（近30天） · Workers 今日 ${u.workers.requestsToday}/10万 · 预估 $${u.billing.estimatedUSD}（${u.billing.note}）· 用量更新于 ${new Date(u.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })}`;
+    const storePct = (u.r2.storageGB / u.r2.storageLimitGB) * 100;
+    const pctFmt = (v) => v < 10 ? v.toFixed(2) : v < 100 ? v.toFixed(1) : String(Math.round(v));
+    el.textContent = `☁️ ${pctFmt(storePct)}% · ${u.r2.objects}对象 · $${u.billing.billableUSD}`;
+    el.title = `R2 存储 ${u.r2.storageGB}/${u.r2.storageLimitGB}GB（${pctFmt(storePct)}%）· 对象 ${u.r2.objects} · A类 ${u.r2.classA}/100万 · B类 ${u.r2.classB}/1000万（近30天） · Workers 今日 ${u.workers.requestsToday}/10万 · 预估 $${u.billing.estimatedUSD}（${u.billing.note}）· 用量更新于 ${new Date(u.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })}`;
     el.style.color = pct > 0.9 ? "var(--down)" : pct > 0.8 ? "var(--amber)" : "var(--green)";
   } catch { el.style.display = "none"; }
 })();
