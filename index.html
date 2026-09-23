@@ -210,11 +210,25 @@
   </div>
 </div>
 <script>
+// ---------- R2 数据源（Cloudflare 免费版适用） ----------
+// 本地/旧 Pages 模式：留空，用相对路径 ./data/... ./avatars/...（零改动）
+// R2 为默认数据源（仓库已不再存 93MB 快照；?data= 可临时覆盖，localStorage dash-data-base 可持久覆盖）。
+window.DATA_BASE_URL = window.DATA_BASE_URL || "https://pub-a05f40620ff24db7996b638d15240c4c.r2.dev";
+const DATA_BASE = (() => {
+  const q = new URLSearchParams(location.search).get("data");
+  const ls = (() => { try { return localStorage.getItem("dash-data-base") || ""; } catch { return ""; } })();
+  return (q || ls || window.DATA_BASE_URL || "").replace(/\/+$/, "");
+})();
+const dataUrl = (p) => (DATA_BASE ? `${DATA_BASE}/${String(p).replace(/^\/+/, "")}` : String(p));
+const resolveUrl = (u) => {
+  if (!u || /^https?:\/\//i.test(u) || u.startsWith("data:") || u.startsWith("blob:")) return u;
+  return dataUrl(u);
+};
 // ---------- V1.0A 身份验证（UI 层门禁） ----------
 (async () => {
   let users = null;
   try {
-    users = (await fetch("users.json?t=" + Date.now()).then((r) => r.json())).users ?? null;
+    users = (await fetch(dataUrl("users.json") + "?t=" + Date.now()).then((r) => r.json())).users ?? null;
   } catch {}
   if (!users || !users.length) return; // 未配置用户则不启用认证
   const gate = document.getElementById("auth-gate");
@@ -541,7 +555,7 @@ let apiOk = false;
 let staticMode = false;
 for (const [platform, file] of [["youtube", "youtube-history"], ["tiktok", "tiktok-history"]]) {
   try {
-    const res = await fetch(`data/${file}.json?t=${Date.now()}`);
+    const res = await fetch(dataUrl(`data/${file}.json`) + `?t=${Date.now()}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const h = await res.json();
     latestUpdated = Math.max(latestUpdated, Date.parse(h.updatedAt) || 0);
@@ -628,10 +642,11 @@ if (AUTH && AUTH.role === "admin") {
     location.reload();
   };
 }
-// 静态模式：加载 /channels.json 补充 alias/group/tags
-if (staticMode) {
+// 静态模式或远端数据模式（R2）：加载 channels.json 补充 alias/group/tags
+// （远端 history 里没有 baked-in 的备注信息，且无本地 API 可写，只能以配置为准）
+if (staticMode || DATA_BASE) {
   try {
-    const cfg = await fetch("channels.json").then(r => r.json());
+    const cfg = await fetch(dataUrl("channels.json")).then(r => r.json());
     for (const c of cfg) {
       const key = `${c.platform ?? "youtube"}:${c.handle}`;
       if (channels[key] && c.alias) channels[key].info.alias = c.alias;
@@ -756,7 +771,7 @@ $("refresh-btn").onclick = async () => {
   if (staticMode) {
     setRefresh('<span class="ico">⟳</span> 刷新中…', true);
     try {
-      const res = await fetch("data/youtube-history.json?t=" + Date.now(), { cache: "no-store" });
+      const res = await fetch(dataUrl("data/youtube-history.json") + "?t=" + Date.now(), { cache: "no-store" });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const h = await res.json();
       let newest = Date.parse(h.updatedAt) || 0;
@@ -1023,7 +1038,7 @@ function renderProfile(platform, info, latest) {
     img.onerror = null;
     img.src = AVATAR_PLACEHOLDER;
   };
-  img.src = info.avatar || AVATAR_PLACEHOLDER;
+  img.src = resolveUrl(info.avatar) || AVATAR_PLACEHOLDER;
   const ptag = platform === "youtube"
     ? '<span class="pill video">YouTube</span>'
     : '<span class="pill short">TikTok</span>';
@@ -1533,7 +1548,7 @@ rebuildChannelSelect();
     const key = $("channel").value;
     if (!key) return;
     let cfg;
-    try { cfg = await fetch("channels.json?t=" + Date.now()).then((r) => r.json()); } catch { alert("读取频道配置失败"); return; }
+    try { cfg = await fetch(dataUrl("channels.json") + "?t=" + Date.now()).then((r) => r.json()); } catch { alert("读取频道配置失败"); return; }
     const [platform, ...rest] = key.split(":");
     const handle = rest.join(":");
     const item = (cfg ?? []).find((c) => (c.platform ?? "youtube") === platform && c.handle === handle);
@@ -1556,8 +1571,8 @@ rebuildChannelSelect();
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[m]));
   const renderMembers = async () => {
     const [users, cfg] = await Promise.all([
-      fetch("users.json?t=" + Date.now()).then((r) => r.json()),
-      fetch("channels.json?t=" + Date.now()).then((r) => r.json()),
+      fetch(dataUrl("users.json") + "?t=" + Date.now()).then((r) => r.json()),
+      fetch(dataUrl("channels.json") + "?t=" + Date.now()).then((r) => r.json()),
     ]);
     const byOwner = {};
     for (const c of cfg) {

@@ -21,13 +21,14 @@ commit_push() {
   local msg="$1"
   git pull --rebase --autostash origin main >> "$LOG" 2>&1 || echo "[$(date '+%F %T')] pull 失败，继续" >> "$LOG"
   bash scripts/sync-static.sh
-  git add data/youtube-history.json avatars web/data/youtube-history.json channels.json web/channels.json users.json web/users.json 2>/dev/null
+  if ! "$NODE_BIN" -e "JSON.parse(require('fs').readFileSync('channels.json','utf8'));JSON.parse(require('fs').readFileSync('data/youtube-history.json','utf8'))" 2>> "$LOG"; then
+    echo "[$(date '+%F %T')] JSON 校验失败，跳过（防止冲突标记入库）" >> "$LOG"
+    git rebase --abort 2>/dev/null
+    return 0
+  fi
+  # 数据每天收完统一推一次 R2（逐频道推 93MB 太贵），仓库只提交配置与小文件
+  git add channels.json web/channels.json users.json web/users.json avatars web/avatars 2>/dev/null
   if ! git diff --cached --quiet; then
-    if ! "$NODE_BIN" -e "JSON.parse(require('fs').readFileSync('channels.json','utf8'));JSON.parse(require('fs').readFileSync('data/youtube-history.json','utf8'))" 2>> "$LOG"; then
-      echo "[$(date '+%F %T')] JSON 校验失败，跳过提交（防止冲突标记入库）" >> "$LOG"
-      git rebase --abort 2>/dev/null
-      return 0
-    fi
     git commit -m "$msg" >> "$LOG" 2>&1
     git pull --rebase --autostash origin main >> "$LOG" 2>&1 || { echo "[$(date '+%F %T')] pull 冲突，中止 rebase（下个频道重试）" >> "$LOG"; git rebase --abort 2>> "$LOG" || true; }
     if git push origin main >> "$LOG" 2>&1; then
@@ -35,6 +36,8 @@ commit_push() {
     else
       echo "[$(date '+%F %T')] push main 失败（下轮自动重试）" >> "$LOG"
     fi
+  else
+    echo "[$(date '+%F %T')] 配置无变更（数据已直推 R2）" >> "$LOG"
   fi
 }
 
@@ -56,4 +59,5 @@ if [ -f data/youtube-history.json ]; then
   cp data/youtube-history.json "backups/youtube-history-$(date +%F).json"
   ls -t backups/youtube-history-*.json 2>/dev/null | tail -n +31 | xargs rm -f 2>/dev/null
 fi
+bash scripts/publish-r2.sh >> "$LOG" 2>&1
 echo "[$(date '+%F %T')] === 每日采集结束 (fail=$FAIL) ===" >> "$LOG"

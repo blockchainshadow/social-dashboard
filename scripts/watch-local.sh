@@ -16,14 +16,16 @@ echo "[$(date '+%F %T')] === watch 开始 ===" >> "$LOG"
 git pull --rebase --autostash origin main >> "$LOG" 2>&1 || echo "[$(date '+%F %T')] pull 失败，继续用本地" >> "$LOG"
 /Users/x/.local/bin/node scripts/watch-new-channels.mjs >> "$LOG" 2>&1
 bash scripts/sync-static.sh
-if ! git diff --quiet -- data/youtube-history.json channels.json users.json || ! git diff --cached --quiet; then
-  git add data/youtube-history.json avatars web/data/youtube-history.json channels.json web/channels.json users.json web/users.json >> "$LOG" 2>&1
+if ! /Users/x/.local/bin/node -e "JSON.parse(require('fs').readFileSync('channels.json','utf8'));JSON.parse(require('fs').readFileSync('data/youtube-history.json','utf8'))" 2>> "$LOG"; then
+  echo "[$(date '+%F %T')] JSON 校验失败，跳过（防止冲突标记入库）" >> "$LOG"
+  git rebase --abort 2>/dev/null
+  exit 0
+fi
+# 数据走 R2，仓库只提交配置与小文件
+bash scripts/publish-r2.sh >> "$LOG" 2>&1
+git add channels.json web/channels.json users.json web/users.json avatars web/avatars >> "$LOG" 2>&1
+if ! git diff --cached --quiet; then
   git commit -m "data: quick snapshot for newly added channels [watch]" >> "$LOG" 2>&1
-  if ! /Users/x/.local/bin/node -e "JSON.parse(require('fs').readFileSync('channels.json','utf8'));JSON.parse(require('fs').readFileSync('data/youtube-history.json','utf8'))" 2>> "$LOG"; then
-    echo "[$(date '+%F %T')] JSON 校验失败，跳过提交（防止冲突标记入库）" >> "$LOG"
-    git rebase --abort 2>/dev/null
-    exit 0
-  fi
   git pull --rebase --autostash origin main >> "$LOG" 2>&1 || { echo "[$(date '+%F %T')] pull 冲突，中止 rebase 下轮重试" >> "$LOG"; git rebase --abort 2>> "$LOG" || true; git reset -q --hard origin/main 2>/dev/null; exit 0; }
   if git push origin main >> "$LOG" 2>&1; then
     git push origin main:v1.0a >> "$LOG" 2>&1 || echo "[$(date '+%F %T')] push v1.0a 失败" >> "$LOG"
@@ -32,5 +34,5 @@ if ! git diff --quiet -- data/youtube-history.json channels.json users.json || !
     echo "[$(date '+%F %T')] push main 失败（下轮自动重试）" >> "$LOG"
   fi
 else
-  echo "[$(date '+%F %T')] 无变化" >> "$LOG"
+  echo "[$(date '+%F %T')] 配置无变更（数据已直推 R2）" >> "$LOG"
 fi
