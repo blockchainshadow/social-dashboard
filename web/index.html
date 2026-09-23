@@ -587,7 +587,6 @@ $("updated-at").textContent = `更新于 ${new Date(latestUpdated).toLocaleStrin
 // ---------- Cloudflare 用量徽标（R2 存储/操作 + Workers + 预估账单，缺文件则隐藏） ----------
 (async () => {
   const el = $("cf-usage");
-  const compact = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : String(n);
   try {
     const u = await fetch(dataUrl("cf-usage.json") + "?t=" + Date.now()).then((r) => { if (!r.ok) throw 0; return r.json(); });
     const pct = Math.max(
@@ -596,9 +595,9 @@ $("updated-at").textContent = `更新于 ${new Date(latestUpdated).toLocaleStrin
       u.r2.classB / u.r2.classBLimit,
       u.workers.requestsToday / u.workers.limit
     );
-    el.textContent = `☁️ ${u.r2.storageGB}G · A${compact(u.r2.classA)}/B${compact(u.r2.classB)} · $${u.billing.billableUSD}`;
+    el.textContent = `☁️ ${u.r2.storageGB}G · ${u.r2.objects}对象 · $${u.billing.billableUSD}`;
     el.title = `R2 存储 ${u.r2.storageGB}/${u.r2.storageLimitGB}GB · 对象 ${u.r2.objects} · A类 ${u.r2.classA}/100万 · B类 ${u.r2.classB}/1000万（近30天） · Workers 今日 ${u.workers.requestsToday}/10万 · 预估 $${u.billing.estimatedUSD}（${u.billing.note}）· 用量更新于 ${new Date(u.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })}`;
-    if (pct > 0.8) el.style.color = "var(--amber)";
+    el.style.color = pct > 0.9 ? "var(--down)" : pct > 0.8 ? "var(--amber)" : "var(--green)";
   } catch { el.style.display = "none"; }
 })();
 
