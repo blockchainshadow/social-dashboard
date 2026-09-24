@@ -16,10 +16,20 @@ const PRICE = { storageGBmo: 0.015, classA_M: 4.5, classB_M: 0.36 };
 
 // token 来源（按序，全自动，无需配置）：
 //   1. $CLOUDFLARE_API_TOKEN（如有自建 token 优先）
-//   2. 本机 wrangler OAuth 登录态（cron 同用户同机器，直接复用，零配置）
-//   3. ~/.config/social-dashboard/cloudflare-token（备用）
+//   2. ~/.config/social-dashboard/cloudflare-api-token（持久 token，cron 无人值守用）
+//   3. 本机 wrangler OAuth 登录态（会过期，仅过渡）
+//   4. ~/.config/social-dashboard/cloudflare-token（备用）
 async function loadToken() {
   if (process.env.CLOUDFLARE_API_TOKEN) return process.env.CLOUDFLARE_API_TOKEN.trim();
+  for (const p of [
+    path.join(os.homedir(), ".config", "social-dashboard", "cloudflare-api-token"),
+    path.join(os.homedir(), ".config", "social-dashboard", "cloudflare-token"),
+  ]) {
+    try {
+      const t = (await readFile(p, "utf8")).trim();
+      if (t) return t;
+    } catch {}
+  }
   for (const p of [
     path.join(os.homedir(), "Library", "Preferences", ".wrangler", "config", "default.toml"),
     path.join(os.homedir(), ".config", ".wrangler", "config", "default.toml"),
@@ -30,12 +40,7 @@ async function loadToken() {
       if (m) return m[1];
     } catch {}
   }
-  try {
-    const p = path.join(os.homedir(), ".config", "social-dashboard", "cloudflare-token");
-    return (await readFile(p, "utf8")).trim();
-  } catch {
-    return "";
-  }
+  return "";
 }
 
 // actionType -> 计费类别（Delete 系免费；读/列系为 B；其余写入系为 A）

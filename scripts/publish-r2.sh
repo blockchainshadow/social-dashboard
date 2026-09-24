@@ -1,13 +1,21 @@
 #!/bin/bash
-# R2 增量发布（cron/手动通用，wrangler OAuth 免密钥）
+# R2 增量发布（cron/手动通用）
 # 用法：bash scripts/publish-r2.sh [--full]
 #   默认：JSON 全传 + 只传 git 感知到的新增/变更头像（日常 cron 用，快）
 #   --full：头像全传（首次建桶/修复用，慢）
-# 前提：同一用户跑过一次 `wrangler login`（token 持久在本地，可过 cron）
+# 认证：优先 $CLOUDFLARE_API_TOKEN / ~/.config/social-dashboard/cloudflare-api-token（持久，
+#   cron 必备）；回退本机 wrangler OAuth（会过期，仅过渡）
 # 输出全走 stdout，调用方自行 >> "$LOG" 2>&1
 cd "$(dirname "$0")/.." || exit 1
 # cron 下 PATH 极简，先补 node/wrangler 所在目录（wrangler 自身也是 node 脚本，靠 env 找 node）
 export PATH="$HOME/.nvm/versions/node/v22.14.0/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+# 持久 API token（cron 无人值守，wrangler OAuth 会过期；文件 600 权限，不进仓库）
+# 建法见 docs/系统说明和操作手册-v1.0.md §10：一枚 custom token 同时给 R2 Storage Edit + Account Analytics Read
+if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+  for _tf in "$HOME/.config/social-dashboard/cloudflare-api-token" "$HOME/.config/social-dashboard/cloudflare-token"; do
+    if [ -f "$_tf" ]; then CLOUDFLARE_API_TOKEN="$(cat "$_tf")"; export CLOUDFLARE_API_TOKEN; break; fi
+  done
+fi
 R2_BUCKET="${R2_BUCKET:-social-dashboard-data}"
 WRANGLER_BIN="${WRANGLER_BIN:-$(command -v wrangler 2>/dev/null || echo "$HOME/.nvm/versions/node/v22.14.0/bin/wrangler")}"
 FULL=0
