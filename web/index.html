@@ -628,9 +628,12 @@ document.querySelectorAll("#range-seg button").forEach((b) => {
 });
 
 // ---------- 账号管理（仅本地服务模式下可用） ----------
+// 必须校验响应体 {ok:true}：只看 HTTP 状态会被劫持页/缓存页误判为“本地服务在线”，
+// 误判后管理操作会 POST 到静态站的 /api 上（Pages 回 405），故宁可严格。
 try {
-  apiOk = (await fetch("/api/health")).ok;
-} catch {}
+  const h = await fetch("/api/health", { cache: "no-store" }).then((r) => r.json());
+  apiOk = !!(h && h.ok === true);
+} catch { apiOk = false; }
 staticMode = !apiOk;
 if (apiOk) {
   $("manage-menu").style.display = "block";
@@ -784,39 +787,41 @@ const setRefresh = (html, spinning) => {
   b.innerHTML = html;
   b.classList.toggle("refreshing", !!spinning);
 };
+async function staticRefresh() {
+  const btn = $("refresh-btn");
+  setRefresh('<span class="ico">⟳</span> 刷新中…', true);
+  try {
+    const res = await fetch(dataUrl("data/youtube-history.json") + "?t=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const h = await res.json();
+    let newest = Date.parse(h.updatedAt) || 0;
+    for (const ch of Object.values(h.channels ?? {})) {
+      const rs = ch.records ?? [];
+      newest = Math.max(newest, Date.parse(rs[rs.length - 1]?.date) || 0);
+    }
+    if (newest > latestUpdated) {
+      setRefresh('<span class="ico">✓</span> 发现新数据，更新中…');
+      setTimeout(() => location.reload(), 500);
+      return;
+    }
+    setRefresh('<span class="ico">✓</span> 已是最新');
+    setTimeout(() => { setRefresh('<span class="ico">⟳</span> 数据刷新'); btn.disabled = false; }, 1800);
+  } catch (e) {
+    alert("刷新失败：" + e.message);
+    setRefresh('<span class="ico">⟳</span> 数据刷新');
+    btn.disabled = false;
+  }
+}
 $("refresh-btn").onclick = async () => {
   const btn = $("refresh-btn");
   if (btn.disabled) return;
   btn.disabled = true;
-  if (staticMode) {
-    setRefresh('<span class="ico">⟳</span> 刷新中…', true);
-    try {
-      const res = await fetch(dataUrl("data/youtube-history.json") + "?t=" + Date.now(), { cache: "no-store" });
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const h = await res.json();
-      let newest = Date.parse(h.updatedAt) || 0;
-      for (const ch of Object.values(h.channels ?? {})) {
-        const rs = ch.records ?? [];
-        newest = Math.max(newest, Date.parse(rs[rs.length - 1]?.date) || 0);
-      }
-      if (newest > latestUpdated) {
-        setRefresh('<span class="ico">✓</span> 发现新数据，更新中…');
-        setTimeout(() => location.reload(), 500);
-        return;
-      }
-      setRefresh('<span class="ico">✓</span> 已是最新');
-      setTimeout(() => { setRefresh('<span class="ico">⟳</span> 数据刷新'); btn.disabled = false; }, 1800);
-    } catch (e) {
-      alert("刷新失败：" + e.message);
-      setRefresh('<span class="ico">⟳</span> 数据刷新');
-      btn.disabled = false;
-    }
-    return;
-  }
+  if (staticMode) { await staticRefresh(); return; }
   if (!currentKey) { btn.disabled = false; return; }
   const [platform, ...rest] = currentKey.split(":");
   const handle = rest.join(":");
   setRefresh('<span class="ico">⟳</span> 抓取中…（约1-2分钟）', true);
+  let fellBack = false;
   try {
     const res = await fetch("/api/refresh", {
       method: "POST",
@@ -825,6 +830,14 @@ $("refresh-btn").onclick = async () => {
     });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) {
+      if (res.status === 404 || res.status === 405) {
+        // 实际是静态站（如健康检查曾被误判）：自愈为静态模式并降级检查远端
+        staticMode = true; apiOk = false;
+        $("manage-menu").style.display = "none";
+        fellBack = true;
+        await staticRefresh();
+        return;
+      }
       alert(`刷新失败：${j.error ?? `HTTP ${res.status}`}`);
     } else {
       location.reload();
@@ -832,8 +845,7 @@ $("refresh-btn").onclick = async () => {
   } catch (e) {
     alert("请求失败：" + e.message);
   } finally {
-    setRefresh('<span class="ico">⟳</span> 数据刷新');
-    btn.disabled = false;
+    if (!fellBack) { setRefresh('<span class="ico">⟳</span> 数据刷新'); btn.disabled = false; }
   }
 };
 
