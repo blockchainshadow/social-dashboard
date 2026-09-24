@@ -65,7 +65,9 @@ done <<< "$HANDLES"
 
 if [ -f data/youtube-history.json ]; then
   cp data/youtube-history.json "backups/youtube-history-$(date +%F).json"
-  ls -t backups/youtube-history-*.json 2>/dev/null | tail -n +8 | xargs rm -f 2>/dev/null
+  # 旧备份 gzip（新2份留 raw 秒恢复），7 份外连 .gz 一起清
+  ls -t backups/youtube-history-*.json 2>/dev/null | tail -n +3 | xargs gzip -f 2>/dev/null
+  ls -t backups/youtube-history-*.json* 2>/dev/null | tail -n +8 | xargs rm -f 2>/dev/null
 fi
 bash scripts/publish-r2.sh >> "$LOG" 2>&1
 echo "[$(date '+%F %T')] === 每日采集结束 (fail=$FAIL) ===" >> "$LOG"
