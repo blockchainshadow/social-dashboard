@@ -7,6 +7,13 @@ NODE_BIN="${NODE_BIN:-$(command -v node 2>/dev/null || echo "$HOME/.nvm/versions
 LOG=logs/youtube-daily.log
 mkdir -p logs backups
 
+# 日志轮转（超 20MB 只留末尾 2000 行，防无限膨胀）
+for _lf in "$LOG" logs/cron.log; do
+  if [ -f "$_lf" ] && [ "$(wc -c < "$_lf" | tr -d ' ')" -gt 20971520 ]; then
+    tail -n 2000 "$_lf" > "$_lf.tmp" && mv "$_lf.tmp" "$_lf"
+  fi
+done
+
 acquire_lock() {
   for i in 1 2 3 4 5; do
     if mkdir .fetch-lock 2>/dev/null; then echo $$ > .fetch-lock/pid; return 0; fi
@@ -58,7 +65,7 @@ done <<< "$HANDLES"
 
 if [ -f data/youtube-history.json ]; then
   cp data/youtube-history.json "backups/youtube-history-$(date +%F).json"
-  ls -t backups/youtube-history-*.json 2>/dev/null | tail -n +31 | xargs rm -f 2>/dev/null
+  ls -t backups/youtube-history-*.json 2>/dev/null | tail -n +8 | xargs rm -f 2>/dev/null
 fi
 bash scripts/publish-r2.sh >> "$LOG" 2>&1
 echo "[$(date '+%F %T')] === 每日采集结束 (fail=$FAIL) ===" >> "$LOG"

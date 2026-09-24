@@ -6,6 +6,12 @@ export PATH="$HOME/.nvm/versions/node/v22.14.0/bin:/opt/homebrew/bin:/usr/local/
 # node 解析：cron 下 PATH 极简，先找 PATH，再找 nvm，最后回退旧路径
 NODE_BIN="${NODE_BIN:-$(command -v node 2>/dev/null || echo "$HOME/.nvm/versions/node/v22.14.0/bin/node")}"
 LOG=logs/watch.log
+# 日志轮转（超 20MB 只留末尾 2000 行，防无限膨胀）
+for _lf in "$LOG" logs/cron.log; do
+  if [ -f "$_lf" ] && [ "$(wc -c < "$_lf" | tr -d ' ')" -gt 20971520 ]; then
+    tail -n 2000 "$_lf" > "$_lf.tmp" && mv "$_lf.tmp" "$_lf"
+  fi
+done
 if ! mkdir .fetch-lock 2>/dev/null; then
   if [ -n "$(find .fetch-lock -maxdepth 0 -mmin +15 2>/dev/null)" ]; then
     rm -rf .fetch-lock && mkdir .fetch-lock || exit 0
