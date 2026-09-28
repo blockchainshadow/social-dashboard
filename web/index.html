@@ -315,7 +315,7 @@ const resolveUrl = (u) => {
       <button class="btn ghost" id="manage-btn" title="添加/删除账号">👤 +/-</button>
       <div class="menu-pop">
         <button id="menu-add">➕ 添加账号</button>
-        <button id="menu-edit">✏️ 分组/标签</button>
+        <button id="menu-edit">✏️ 修改备注/分组/标签</button>
         <button id="menu-del" class="danger">🗑 删除当前账号</button>
         <button id="menu-members">👥 成员管理</button>
         <button id="menu-token">⚙️ GitHub Token</button>
@@ -1574,7 +1574,7 @@ rebuildChannelSelect();
   // Token 方案已由中转取代，隐藏入口
   $("menu-token").style.display = "none";
 
-  // ✏️ 分组/标签：仅频道 owner（或 admin 全员模式）可编辑，经中转更新 channels.json
+  // ✏️ 修改备注/分组/标签：仅频道 owner（或 admin 全员模式）可编辑，经中转更新 channels.json
   $("menu-edit").onclick = async () => {
     $("manage-menu").classList.remove("open");
     const key = $("channel").value;
@@ -1587,12 +1587,17 @@ rebuildChannelSelect();
     const isOwner = !!(item && item.owner === AUTH.user);
     const allMode = sessionStorage.getItem("dash-all") === "1" && AUTH.role === "admin";
     if (!isOwner && !allMode) { alert("只能编辑自己名下的频道"); return; }
-    const g = prompt("分组名称（留空 = 取消分组）", item?.group ?? "");
+    const a = prompt("修改备注名（留空 = 不修改）", item?.alias ?? "");
+    if (a === null) return;
+    const g = prompt("修改分组（留空 = 取消分组）", item?.group ?? "");
     if (g === null) return;
-    const t = prompt("标签（逗号分隔，可留空）", (item?.tags ?? []).join(","));
+    const t = prompt("修改标签（逗号分隔，可留空）", (item?.tags ?? []).join(","));
     if (t === null) return;
     try {
-      const { ok, body } = await relay({ action: "update", platform, handle, group: g.trim(), tags: [...new Set(t.split(/[,，、\s]+/).map((x) => x.trim()).filter(Boolean))] });
+      const payload = { action: "update", platform, handle, group: g.trim(), tags: [...new Set(t.split(/[,，、\s]+/).map((x) => x.trim()).filter(Boolean))] };
+      const alias = a.trim();
+      if (alias) payload.alias = alias; // 留空=不修改（不清掉原备注名）
+      const { ok, body } = await relay(payload);
       if (!ok) { alert("保存失败：" + (body.error ?? "未知错误")); return; }
       alert("已保存。约 1 分钟后点「⟳ 数据刷新」生效。");
     } catch (e) { alert("请求失败：" + e.message); }
