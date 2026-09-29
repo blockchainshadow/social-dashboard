@@ -421,5 +421,11 @@
       "公司",
       "大火箭"
     ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@XiaonaituDram",
+    "owner": "xiong",
+    "group": "短剧"
   }
 ]
