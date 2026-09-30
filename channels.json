@@ -433,5 +433,16 @@
     "handle": "@xiangxiang8866",
     "owner": "xiong",
     "group": "短剧"
+  },
+  {
+    "platform": "youtube",
+    "handle": "@jellyfish-bgm",
+    "owner": "xiong",
+    "group": "音乐",
+    "tags": [
+      "Lofi",
+      "音乐",
+      "AI"
+    ]
   }
 ]
