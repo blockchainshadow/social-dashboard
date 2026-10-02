@@ -31,6 +31,8 @@
 
 状态：`queued → running → collected → publishing → complete`；采集错误为 `failed`。`collected/publishing` 重试只发布已保存结果，不重新采集。租约覆盖采集和发布，活 PID 永不按固定时长抢占；死进程可接管，发布错误显式释放。远端 request ID 在事务内去重，确认响应丢失后重放仍映射原任务（包含已完成任务）。
 
+自动发现只为尚未尝试过的频道创建 `initial`，入队时在同一事务内检查所有既有初始任务，包括 `failed/cancelled` 终态；失败频道不会每两分钟重建任务或重复消耗配额。显式新增、刷新及新的管理请求不受此发现规则限制，仍可重新采集。
+
 `publicationSnapshot` 在一致性读事务中返回各频道的版本和元数据，仅带有变化频道的原始内容。构建器生成 `data/channels/<24位内容摘要>.json`，索引引用内容寻址分片；未变频道不重新序列化。发布器有独立活 PID 锁；头像、必要分片全部上传成功后才上传 `data/dashboard-index.json`，成功标记只在最后写入。`--jobs-only` 只更新公开任务状态。
 
 主要入口：

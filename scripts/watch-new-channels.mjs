@@ -29,8 +29,8 @@ async function main(argv = process.argv.slice(2)) {
     const newChannels = [];
     for (const item of youtube) {
       if (store.hasRecords(item.handle)) continue;
-      store.enqueue(item.handle, "initial", { ...item });
-      newChannels.push(item.handle);
+      const job = store.enqueue(item.handle, "initial", { ...item }, { once: true });
+      if (job.status === "queued") newChannels.push(item.handle);
     }
     console.log(JSON.stringify({ queued: newChannels.length, newChannels }));
   } finally {

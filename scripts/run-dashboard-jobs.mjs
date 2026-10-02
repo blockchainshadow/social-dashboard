@@ -250,7 +250,7 @@ export async function queueLocalJobs(store, config, { kind = "refresh", handles 
     if ((entry.platform ?? "youtube") !== "youtube") continue;
     if (handles && !handles.includes(entry.handle)) continue;
     if (kind === "initial" && store.hasRecords(entry.handle)) continue;
-    store.enqueue(entry.handle, kind, { ...entry });
+    store.enqueue(entry.handle, kind, { ...entry }, { once: kind === "initial" });
   }
 }
 

@@ -321,8 +321,8 @@ function openStore({ root = process.cwd() } = {}) {
     ),
     softDeleteChannel: db.prepare("UPDATE channels SET deleted_at = ?, updated_at = ? WHERE handle = ?"),
 
-    getJobsByHandleStatus: db.prepare(
-      "SELECT * FROM jobs WHERE handle = ? AND kind = ? AND status IN ('queued','running','collected','publishing') ORDER BY id LIMIT 1"
+    getExistingJob: db.prepare(
+      "SELECT * FROM jobs WHERE handle = ? AND kind = ? AND (? = 1 OR status IN ('queued','running','collected','publishing')) ORDER BY id LIMIT 1"
     ),
     insertJob: db.prepare(
       "INSERT INTO jobs (handle, kind, status, item, created_at, updated_at) VALUES (?, ?, 'queued', ?, ?, ?)"
@@ -664,7 +664,7 @@ function openStore({ root = process.cwd() } = {}) {
     return row ? sanitizeJob(row) : null;
   }
 
-  function enqueue(handle, kind, item = {}) {
+  function enqueue(handle, kind, item = {}, { once = false } = {}) {
     if (!VALID_KINDS.has(kind)) throw new Error(`enqueue: invalid kind ${kind}`);
     const canonical = resolveCanonical(handle) ?? handle;
     const requestId = typeof item?.requestId === "string" ? item.requestId.trim() : "";
@@ -673,7 +673,7 @@ function openStore({ root = process.cwd() } = {}) {
         const replay = stmts.getJobByRequest.get(requestId);
         if (replay) return sanitizeJob(replay);
       }
-      const existing = stmts.getJobsByHandleStatus.get(canonical, kind);
+      const existing = stmts.getExistingJob.get(canonical, kind, once ? 1 : 0);
       if (existing) {
         if (requestId) stmts.mapRequestToJob.run(requestId, existing.id);
         return sanitizeJob(existing);

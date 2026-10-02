@@ -128,6 +128,44 @@ test("queue-new skips existing records without skipping new configured channels"
   }
 });
 
+test("failed discovery stays terminal across watches while explicit retry remains possible", async () => {
+  const root = await fixture();
+  try {
+    let attempts = 0;
+    let recover = false;
+    const collectors = {
+      initial: async () => {
+        attempts++;
+        if (!recover) throw new Error("Channel not found");
+        return result(1);
+      },
+      full: async () => result(2),
+      refresh: async () => { throw new Error("unexpected refresh"); },
+    };
+    await assert.rejects(isolatedRunner(root, { publish: false, collectors }), /1 collection job/);
+    let store = openStore({ root });
+    const failedId = store.jobs(HANDLE).find((job) => job.kind === "initial").id;
+    await queueLocalJobs(store, CONFIG, { kind: "initial" });
+    store.close();
+    await isolatedRunner(root, { publish: false, collectors });
+    store = openStore({ root });
+    assert.equal(attempts, 1);
+    assert.equal(store.hasRecords(HANDLE), false);
+    assert.equal(store.jobs(HANDLE).find((job) => job.id === failedId).status, "failed");
+    store.enqueue(HANDLE, "initial", CONFIG[0]);
+    store.close();
+    recover = true;
+    await isolatedRunner(root, { collectors });
+    store = openStore({ root });
+    assert.equal(attempts, 2);
+    assert.equal(store.getChannel(HANDLE).records[0].videoCountTracked, 2);
+    assert.equal(store.jobs(HANDLE).find((job) => job.id === failedId).status, "failed");
+    store.close();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("configuration deletion reaches the published index without a collection job", async () => {
   const root = await fixture();
   try {
