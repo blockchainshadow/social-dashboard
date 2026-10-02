@@ -739,9 +739,22 @@ export async function writeConfig(channels) {
   await writeFile(CONFIG_FILE, JSON.stringify(channels, null, 2));
 }
 
+// 页面/API 不完整时保留旧视频，但不把旧指标误认为本次采集结果。
+export function preserveTrackedVideos(record, previous) {
+  if (!previous) return;
+  for (const [id, video] of Object.entries(previous.videos ?? {})) {
+    if (!Object.hasOwn(record.videos, id)) {
+      record.videos[id] = { ...video, staleAt: video.staleAt ?? previous.date };
+    }
+  }
+  record.videoCountTracked = Object.keys(record.videos).length;
+}
+
 // 合并一条频道记录到 history 并返回该频道对象
 export function mergeIntoHistory(history, { handle, profile, about, record }) {
   const ch = (history.channels[handle] ??= { info: {}, records: [] });
+  const previous = ch.records.findLast((r) => r.date <= record.date);
+  preserveTrackedVideos(record, previous);
   ch.records = ch.records.filter((r) => r.date !== record.date);
   ch.records.push(record);
   ch.records.sort((a, b) => a.date.localeCompare(b.date));

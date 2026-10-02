@@ -1076,13 +1076,15 @@ function buildRows(records) {
       publishedFull: v.publishedFull,
       durationSec: v.durationSec,
       views: v.views,
+      staleAt: v.staleAt,
+      approx: !!v.approx,
       likes: v.likes,
       comments: v.comments,
       shares: v.shares,
       descriptionChars: v.descriptionChars,
       shorts: !!v.shorts,
       membersOnly: !!v.membersOnly,
-      viewsDelta: pv != null && v.views != null ? v.views - pv : null,
+      viewsDelta: !v.staleAt && pv != null && v.views != null ? v.views - pv : null,
       engagement: v.likes != null && v.views ? (v.likes / v.views) * 100 : null,
       url: `https://youtu.be/${id}`,
       thumb: `https://i.ytimg.com/vi/${id}/mqdefault.jpg`,
@@ -1115,7 +1117,8 @@ function renderProfile(platform, info, latest) {
   const origName = info.alias && info.name && info.alias !== info.name
     ? `<span class="orig-name">${escHtml(info.name)}</span>` : "";
   $("p-name").innerHTML = `${displayName} ${ptag}${info.verified ? ' <span class="pill member">✔ 已认证</span>' : ""}${origName}`;
-  const handleText = info.canonicalUrl?.replace(/^https?:\/\/(www\.)?(youtube\.com|tiktok\.com)\//, "") ?? "";
+  let handleText = info.canonicalUrl?.replace(/^https?:\/\/(www\.)?(youtube\.com|tiktok\.com)\//, "") ?? "";
+  try { handleText = decodeURI(handleText); } catch {} // 不合法的 URL 转义保留原文，链接仍用 canonicalUrl
   $("p-handle").textContent = handleText;
   $("p-handle").href = info.canonicalUrl ?? "#";
 
@@ -1443,7 +1446,7 @@ function renderTable() {
       return `
       <tr>
         <td>${i + 1}</td>
-        <td><div class="vtitle"><img loading="lazy" src="${vThumb}" alt="" /><span title="${escAttr(r.title || r.id)}"><a href="${vUrl}" target="_blank" rel="noopener">${vTitle}</a></span></div></td>
+        <td><div class="vtitle"><img loading="lazy" src="${vThumb}" alt="" /><span title="${escAttr(r.title || r.id)}"><a href="${vUrl}" target="_blank" rel="noopener">${vTitle}</a>${r.staleAt ? ` <span class="hint" title="最后采集于 ${escAttr(r.staleAt)}，此次未获取到新指标">· 未更新</span>` : ""}</span></div></td>
         <td><span class="pill ${r.shorts ? "short" : "video"}">${r.shorts ? "Short" : "Video"}</span></td>
         <td>${fmtDT(r)}</td>
         <td class="num">${fmtDur(r.durationSec)}</td>
