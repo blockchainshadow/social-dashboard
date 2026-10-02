@@ -296,7 +296,13 @@
     "platform": "youtube",
     "handle": "@chouchouhu",
     "owner": "xiong",
-    "all": true
+    "all": true,
+    "alias": "",
+    "group": "游戏",
+    "tags": [
+      "游戏制作",
+      "AI"
+    ]
   },
   {
     "platform": "youtube",
