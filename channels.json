@@ -352,7 +352,13 @@
     "platform": "youtube",
     "handle": "@CarderyDev",
     "owner": "xiong",
-    "all": true
+    "all": true,
+    "alias": "",
+    "group": "游戏",
+    "tags": [
+      "公司",
+      "IP"
+    ]
   },
   {
     "platform": "youtube",
