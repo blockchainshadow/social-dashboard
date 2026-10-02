@@ -470,5 +470,16 @@
       "起号"
     ],
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@Gaby-sharenut",
+    "owner": "xiong",
+    "alias": "Gaby学姐",
+    "group": "游戏",
+    "tags": [
+      "游戏",
+      "Steam"
+    ]
   }
 ]
