@@ -506,10 +506,11 @@
     "owner": "xiong",
     "tags": [
       "起号",
-      "长视频",
       "科普"
     ],
-    "all": true
+    "all": true,
+    "alias": "",
+    "group": "科普"
   },
   {
     "platform": "youtube",
