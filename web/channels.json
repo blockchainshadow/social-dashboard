@@ -232,7 +232,13 @@
     "platform": "youtube",
     "handle": "@Onityan",
     "owner": "xiong",
-    "all": true
+    "all": true,
+    "alias": "",
+    "group": "游戏",
+    "tags": [
+      "游戏",
+      "解说"
+    ]
   },
   {
     "platform": "youtube",
@@ -285,7 +291,12 @@
     "platform": "youtube",
     "handle": "@Furo",
     "owner": "xiong",
-    "all": true
+    "all": true,
+    "alias": "",
+    "group": "游戏",
+    "tags": [
+      "游戏"
+    ]
   },
   {
     "platform": "youtube",
