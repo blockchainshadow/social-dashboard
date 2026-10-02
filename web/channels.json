@@ -47,11 +47,6 @@
   },
   {
     "platform": "youtube",
-    "handle": "@nivvyn",
-    "all": true
-  },
-  {
-    "platform": "youtube",
     "handle": "@zeng37CN",
     "all": true,
     "group": "生活",
@@ -534,5 +529,17 @@
       "游戏",
       "Steam"
     ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@nivvyn",
+    "alias": "",
+    "group": "游戏",
+    "tags": [
+      "游戏",
+      "马来"
+    ],
+    "all": true,
+    "owner": "admin"
   }
 ]
