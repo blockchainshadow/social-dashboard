@@ -275,7 +275,12 @@
     "platform": "youtube",
     "handle": "@CalmLofiRoom-l3s",
     "owner": "xiong",
-    "all": true
+    "all": true,
+    "alias": "",
+    "group": "Lofi",
+    "tags": [
+      "Lofi"
+    ]
   },
   {
     "platform": "youtube",
