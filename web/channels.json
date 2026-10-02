@@ -220,7 +220,14 @@
     "platform": "youtube",
     "handle": "@Kim和Nana的遊戲世界",
     "owner": "xiong",
-    "all": true
+    "all": true,
+    "alias": "",
+    "group": "游戏",
+    "tags": [
+      "游戏",
+      "解说",
+      "资讯"
+    ]
   },
   {
     "platform": "youtube",
@@ -237,7 +244,8 @@
     "group": "游戏",
     "tags": [
       "游戏",
-      "解说"
+      "解说",
+      "资讯"
     ]
   },
   {
