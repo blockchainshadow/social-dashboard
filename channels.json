@@ -435,5 +435,37 @@
     "owner": "xiong",
     "group": "短剧",
     "all": true
+  },
+  {
+    "platform": "youtube",
+    "handle": "@jellyfish-bgm",
+    "owner": "xiong",
+    "group": "音乐",
+    "tags": [
+      "Lofi",
+      "音乐",
+      "AI"
+    ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@阿喬頭不大",
+    "owner": "xiong",
+    "tags": [
+      "起号",
+      "长视频",
+      "科普"
+    ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@아오링고잡화점",
+    "owner": "xiong",
+    "group": "Lofi",
+    "tags": [
+      "Lofi",
+      "音乐",
+      "起号"
+    ]
   }
 ]
