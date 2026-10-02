@@ -445,7 +445,8 @@
       "Lofi",
       "音乐",
       "AI"
-    ]
+    ],
+    "all": true
   },
   {
     "platform": "youtube",
@@ -455,7 +456,8 @@
       "起号",
       "长视频",
       "科普"
-    ]
+    ],
+    "all": true
   },
   {
     "platform": "youtube",
@@ -466,6 +468,7 @@
       "Lofi",
       "音乐",
       "起号"
-    ]
+    ],
+    "all": true
   }
 ]
