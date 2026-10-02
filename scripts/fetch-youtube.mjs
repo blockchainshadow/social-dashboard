@@ -5,6 +5,7 @@
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 
 const CONFIG_FILE = path.resolve("channels.json");
@@ -389,9 +390,173 @@ export async function cacheAvatar(url, name) {
   }
 }
 
+// ---------- YouTube Data API v3（配额内优先，1 call = 1 单位） ----------
+// Key 来源：$YOUTUBE_API_KEY 或 ~/.config/social-dashboard/youtube-api-key
+// 每日预算 YT_QUOTA_CAP（默认 9000/10000），记账文件 logs/.yt-quota-YYYYMMDD，超限即停（不烧完）。
+async function loadYouTubeKey() {
+  if (process.env.YOUTUBE_API_KEY?.trim()) return process.env.YOUTUBE_API_KEY.trim();
+  try {
+    const t = (await readFile(path.join(os.homedir(), ".config", "social-dashboard", "youtube-api-key"), "utf8")).trim();
+    if (t) return t;
+  } catch {}
+  return "";
+}
+
+const YT_QUOTA_CAP = Number(process.env.YT_QUOTA_CAP ?? 9000);
+const quotaPath = () => {
+  const d = new Date();
+  const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return path.resolve(`logs/.yt-quota-${k}`);
+};
+let _quota = -1;
+async function quotaGet() {
+  if (_quota < 0) {
+    try { _quota = parseInt(await readFile(quotaPath(), "utf8"), 10) || 0; }
+    catch { _quota = 0; }
+  }
+  return _quota;
+}
+async function quotaAdd(n) {
+  _quota = (await quotaGet()) + n;
+  try {
+    await mkdir(path.dirname(quotaPath()), { recursive: true });
+    await writeFile(quotaPath(), String(_quota));
+  } catch {}
+  return _quota;
+}
+
+class QuotaExceeded extends Error {}
+class ApiFatal extends Error {}
+
+async function ytApi(key, endpoint, params) {
+  if ((await quotaGet()) >= YT_QUOTA_CAP) {
+    throw new QuotaExceeded(`配额已用尽（${await quotaGet()}/${YT_QUOTA_CAP}），明早自动恢复`);
+  }
+  const url = new URL(`https://www.googleapis.com/youtube/v3/${endpoint}`);
+  url.searchParams.set("key", key);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  const res = await fetch(url, {
+    headers: { "User-Agent": UA },
+    signal: AbortSignal.timeout(30000),
+  });
+  const j = await res.json().catch(() => ({}));
+  await quotaAdd(1);
+  if (!res.ok) {
+    const reason = j?.error?.errors?.[0]?.reason ?? "";
+    const msg = `YT API ${endpoint} ${res.status}: ${(j?.error?.message ?? "").slice(0, 120)}`;
+    if (res.status === 403 && /quotaExceeded|dailyLimitExceeded|rateLimitExceeded/i.test(reason + JSON.stringify(j))) {
+      throw new QuotaExceeded(`YouTube API 配额耗尽: ${reason}`);
+    }
+    if ([400, 401, 403].includes(res.status)) throw new ApiFatal(msg); // key/权限问题，回退抓取也救不了
+    const e = new Error(msg);
+    e.apiRetryable = true;
+    throw e;
+  }
+  return j;
+}
+
+function parseISODuration(s) {
+  const m = String(s ?? "").match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!m) return null;
+  return (+(m[1] ?? 0)) * 3600 + (+(m[2] ?? 0)) * 60 + (+(m[3] ?? 0));
+}
+
+// API 路径：channels → uploads 播放列表（近 50 条）→ videos 详情。
+// 只产出增量精确快照（近 50 条视频全精确，无近似值）；旧视频/旧快照原样保留在 history 里。
+// 已知局限：API 不区分 Shorts（新视频 shorts=false，旧快照的标记不受影响）；keywords 为空（沿用上次）。
+export async function syncChannelViaAPI(item) {
+  const key = await loadYouTubeKey();
+  if (!key) throw new Error("未配置 YOUTUBE_API_KEY");
+  const handle = typeof item === "string" ? item : item.handle;
+  console.log(`\n== ${handle}（API） ==`);
+  const chRes = /^UC[\w-]{20,}$/.test(handle)
+    ? await ytApi(key, "channels", { part: "snippet,statistics,contentDetails", id: handle })
+    : await ytApi(key, "channels", { part: "snippet,statistics,contentDetails", forHandle: handle });
+  const c = chRes.items?.[0];
+  if (!c) {
+    const e = new Error(`API 未找到频道 ${handle}`);
+    e.apiRetryable = true; // handle 可能改名，值得回退抓取试一次
+    throw e;
+  }
+  const sn = c.snippet ?? {};
+  const st = c.statistics ?? {};
+  const uploadsId = c.contentDetails?.relatedPlaylists?.uploads;
+
+  const videosOut = {};
+  if (uploadsId) {
+    const pl = await ytApi(key, "playlistItems", { part: "snippet,contentDetails", playlistId: uploadsId, maxResults: "50" });
+    const items = pl.items ?? [];
+    const pubById = {};
+    for (const it of items) {
+      const id = it?.contentDetails?.videoId;
+      if (id && !pubById[id]) pubById[id] = it?.contentDetails?.videoPublishedAt ?? it?.snippet?.publishedAt ?? null;
+    }
+    const ids = Object.keys(pubById);
+    for (let i = 0; i < ids.length; i += 50) {
+      const chunk = ids.slice(i, i + 50);
+      const v = await ytApi(key, "videos", { part: "snippet,statistics,contentDetails", id: chunk.join(",") });
+      for (const vd of v.items ?? []) {
+        const vs = vd.statistics ?? {};
+        videosOut[vd.id] = {
+          title: vd.snippet?.title ?? "",
+          views: vs.viewCount != null ? parseInt(vs.viewCount, 10) : null,
+          likes: vs.likeCount != null ? parseInt(vs.likeCount, 10) : null,
+          published: toISODate(vd.snippet?.publishedAt),
+          publishedFull: vd.snippet?.publishedAt ?? pubById[vd.id] ?? null,
+          durationSec: parseISODuration(vd.contentDetails?.duration),
+          descriptionChars: vd.snippet?.description?.length ?? null,
+          shorts: false,
+          membersOnly: false,
+          approx: false,
+        };
+      }
+    }
+  }
+
+  const thumbs = sn.thumbnails ?? {};
+  const avatar = [thumbs.maxres, thumbs.standard, thumbs.high, thumbs.medium, thumbs.default]
+    .map((t) => t?.url).find(Boolean) ?? null;
+  const profile = {
+    name: sn.title ?? handle,
+    channelId: c.id ?? null,
+    canonicalUrl: channelUrlBase(handle),
+    description: sn.description ?? null,
+    keywords: [],
+    rssUrl: `https://www.youtube.com/feeds/videos.xml?channel_id=${c.id ?? ""}`,
+    avatar,
+    isFamilySafe: null,
+    availableCountryCodes: null,
+  };
+  const subscribers = st.subscriberCount != null ? parseInt(st.subscriberCount, 10) : null;
+  const about = {
+    totalViews: st.viewCount != null ? parseInt(st.viewCount, 10) : null,
+    videoCountTotal: st.videoCount != null ? parseInt(st.videoCount, 10) : null,
+    joinedDate: toISODate(sn.publishedAt),
+    country: sn.country ?? null,
+    links: [],
+  };
+  const record = {
+    date: new Date().toISOString().slice(0, 10),
+    subscribers,
+    channelTotalViews: about.totalViews,
+    channelVideoCount: about.videoCountTotal,
+    videoCountTracked: Object.keys(videosOut).length,
+    videos: videosOut,
+  };
+  return { handle, platform: "youtube", profile, about, record, source: "youtube-api" };
+}
+
 // ---------- 同步单个频道（供 CLI 与 server 共用） ----------
 export async function syncChannel(item, opts = {}) {
   const handle = typeof item === "string" ? item : item.handle;
+  if (await loadYouTubeKey()) {
+    try {
+      return await syncChannelViaAPI(item);
+    } catch (e) {
+      if (e instanceof QuotaExceeded || e instanceof ApiFatal) throw e;
+      console.warn(`  ! API 失败，回退页面抓取: ${e0(e)}`);
+    }
+  }
   const all = !!item.all || !!opts.all;
   const exactLimit = opts.exactLimit ?? RECENT_EXACT;
   const base = channelUrlBase(handle);
@@ -525,6 +690,7 @@ export function mergeIntoHistory(history, { handle, profile, about, record }) {
   const safeName = handle.replace(/[^\w-]/g, "") || "channel";
   const info = {
     ...profile,
+    keywords: profile.keywords?.length ? profile.keywords : (ch.info?.keywords ?? []),
     country: about.country ?? ch.info?.country ?? null,
     joinedDate: about.joinedDate ?? ch.info?.joinedDate ?? null,
     links: about.links?.length ? about.links : (ch.info?.links ?? []),
