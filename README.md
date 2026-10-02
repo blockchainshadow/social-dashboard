@@ -22,9 +22,9 @@ YouTube 公开数据看板：订阅、播放、点赞趋势 + 分组/标签管�
 
 ## YouTube 混合采集
 
-`scripts/fetch-youtube.mjs` 优先用 YouTube Data API 获取频道统计及最近 50 条视频的精确数据；频道页提供关键词、外链及视频列表，`channels.json` 中 `all: true` 时继续翻页枚举普通视频和 Shorts。列表里其余视频按 50 个 ID 一批从 API 补齐播放、点赞、时间、时长等；API 未返回的视频沿用页面/watch/RSS 数据。频道页或翻页失败时，本次可能仅抓到 API 最近 50 条，但合并快照会保留先前已追踪的视频；旧视频显示「未更新」及最后采集日期，不表示本次刷新了它们的指标。API 不可用或达到脚本配额上限时回退页面采集；日志会提示降级。
+`scripts/fetch-youtube.mjs` 优先用 YouTube Data API 获取频道统计及最近 50 条视频的精确播放、点赞、评论数和时长；频道页提供关键词、外链及视频列表，`channels.json` 中 `all: true` 时继续翻页枚举普通视频和 Shorts。列表里其余视频按 50 个 ID 一批从 API 补齐公开指标；API 未返回的视频沿用页面/watch/RSS 数据。公开视频接口**不提供分享数**，未开放的评论/播放指标也保持「—」而非填 0。增量须有两次有效播放量快照。频道页或翻页失败时，本次可能仅抓到 API 最近 50 条，但合并快照会保留先前已追踪的视频；旧视频显示「未更新」及最后采集日期，不表示本次刷新了它们的指标。API 不可用或达到脚本配额上限时回退页面采集；日志会提示降级。
 
-看完整的视频列表：在页面上方选择频道，再点「终身」。默认「7天」仅展示范围内发布的视频。线上「数据刷新」只检查 R2 已发布的新快照，**不会**发起全量采集；全量采集需在本机确保该频道配置 `all: true` 后运行 `node scripts/fetch-youtube.mjs --only @频道handle`，再运行 `bash scripts/publish-r2.sh`。本机服务的「数据刷新」会重新采集该频道；如果 YouTube 翻页失败，既有视频仍保留但指标标记「未更新」。
+看完整的视频列表：在页面上方选择频道，再点「终身」。默认「7天」仅展示范围内发布的视频。线上「检查发布」只检查 R2 已发布的新快照，**不会**发起采集；上方「发布于」是索引发布时间，表格旁另显示当前频道采集日期。全量采集需在本机确保该频道配置 `all: true` 后运行 `node scripts/fetch-youtube.mjs --only @频道handle`，再运行 `bash scripts/publish-r2.sh`。本机服务的「数据刷新」会重新采集该频道；如果 YouTube 翻页失败，既有视频仍保留但指标标记「未更新」。
 
 密钥从 `YOUTUBE_API_KEY` 或 `~/.config/social-dashboard/youtube-api-key` 读取，不需要 Google OAuth。YouTube Data API 默认每太平洋时间自然日 10,000 units；`channels.list`、`playlistItems.list`、`videos.list` 每请求各 1 unit，失败请求也计入。脚本在发送请求前通过 `logs/.yt-quota-YYYY-MM-DD` 和目录锁跨进程预留，`YT_QUOTA_CAP` 默认为 9000、最高 9000（留 1000 units 余量）；太平洋时间午夜重置。达到上限、Google 报配额耗尽、计数文件损坏或锁超时即停用 API，回退页面采集。异常退出留下的 `logs/.yt-quota-lock-YYYY-MM-DD` 不会自动抢锁：确认所有采集进程已退出后才能手动移除该锁，**不要**清空当天计数/阻断文件。官方来源见 `docs/youtube-api-quota-research.md`。
 
@@ -34,7 +34,7 @@ YouTube 公开数据看板：订阅、播放、点赞趋势 + 分组/标签管�
 
 本机 `data/youtube-history.json` 是唯一原始历史数据，不能删除。`node scripts/build-dashboard-index.mjs` 从它生成 `data/dashboard-index.json` 与 `data/channels/*.json`（生成物不进 Git）；`bash scripts/publish-r2.sh` 仅上传变更的频道分片，**最后上传索引**。首次部署必须先确认索引及分片发布成功，再发布新版 `index.html`；发布失败会返回非零码，下次自动重试。`--full` 可补传全部分片。
 
-静态站每次打开只检查索引；频道分片 URL 按内容版本缓存，点击「数据刷新」也只检查索引是否变更，不再下载整份历史。若本地使用静态服务器预览，先生成索引；本地服务默认仍从 R2 读取已发布数据。
+静态站每次打开只检查索引；频道分片 URL 按内容版本缓存，点击「检查发布」也只检查索引是否变更，不再下载整份历史或请求 YouTube API。若本地使用静态服务器预览，先生成索引；本地服务默认仍从 R2 读取已发布数据。
 
 ## 本地开发
 

@@ -10,7 +10,7 @@
 
 ### ① 数据源
 
-* **YouTube**：有 API key 时先取 `channels.list` + 上传列表最近 50 条 + `videos.list` 精确统计；再从频道页 `ytInitialData` 补关键词/外链等，`all: true` 时通过 innertube 翻页枚举普通视频和 Shorts，对额外 ID 按 50 条/批用 API 补播放、点赞、时长与发布时间。API 缺失的视频沿用页面/watch/RSS；API 或配额不可用时回退页面抓取。页面/翻页失败时本轮可能仅有最近 50 条，但合并记录会保留之前追踪的视频及其最后采集日期（页面标记「未更新」，不计算伪造的播放增量）。Shorts 判别来自页面 Shorts 列表；无公开播放量时访问 watch 页尝试识别会员视频。
+* **YouTube**：有 API key 时先取 `channels.list` + 上传列表最近 50 条 + `videos.list` 精确统计（播放、点赞、公开视频评论数、时长）；再从频道页 `ytInitialData` 补关键词/外链等，`all: true` 时通过 innertube 翻页枚举普通视频和 Shorts，对额外 ID 按 50 条/批用 API 补指标。公开视频接口没有分享数；播放增量需要两次有效快照。API 缺失的视频沿用页面/watch/RSS；API 或配额不可用时回退页面抓取。页面/翻页失败时本轮可能仅有最近 50 条，但合并记录会保留之前追踪的视频及其最后采集日期（页面标记「未更新」，不计算伪造的播放增量）。Shorts 判别来自页面 Shorts 列表；无公开播放量时访问 watch 页尝试识别会员视频。
 * **TikTok**：页面内嵌 JSON 直抓 → 失败走 Jina Reader 渲染代理 → 再失败走 Playwright 无头 Chromium。WAF 限制下只能拿档案级（粉丝/获赞/头像），无视频级。
 
 ### ② 采集层（本机，cron 驱动）
@@ -53,6 +53,8 @@ Pages 单文件 25MiB 上限是数据必须放 R2 的根本原因。
 * **C 调试覆盖**：`?data=<R2地址>` 临时切源；`localStorage dash-data-base` 持久覆盖。默认 `window.DATA_BASE_URL` 即 R2 公读。
 
 顶栏 `☁️` 徽标：读 R2 `cf-usage.json`，显示 `存储占比% · 对象数 · $账单`；任一维度超 80% 黄、超 90% 红；文件缺失自动隐藏。`YT API` 徽标：读 R2 `data/youtube-api-usage.json`，显示本机已预留的当日调用数/上限和百分比，沿用同一颜色阈值，暂停或快照缺失/过期标红。
+
+公网按钮「检查发布」只更新 R2 索引/分片，不发起采集；「发布于」是索引时间，当前频道的最后采集日期单独显示在视频表旁。本地服务按钮「数据刷新」才会调用 `/api/refresh` 抓取频道。
 
 ## 2. 免费额度与红线（2026-09 实测口径）
 

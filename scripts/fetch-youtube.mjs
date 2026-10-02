@@ -448,12 +448,13 @@ function parseISODuration(s) {
 }
 
 // API 路径先取最近 50 条；全量枚举与 API 不提供的字段由频道页、Shorts 页和 RSS 补齐。
-function apiVideo(vd, publishedFallback = null) {
+export function apiVideo(vd, publishedFallback = null) {
   const vs = vd.statistics ?? {};
   return {
     title: vd.snippet?.title ?? "",
     views: vs.viewCount != null ? parseInt(vs.viewCount, 10) : null,
     likes: vs.likeCount != null ? parseInt(vs.likeCount, 10) : null,
+    comments: vs.commentCount != null ? parseInt(vs.commentCount, 10) : null,
     published: toISODate(vd.snippet?.publishedAt),
     publishedFull: vd.snippet?.publishedAt ?? publishedFallback,
     durationSec: parseISODuration(vd.contentDetails?.duration),
@@ -471,7 +472,7 @@ async function fetchApiVideos(key, ids, out, publishedById = {}) {
     for (const vd of res.items ?? []) out[vd.id] = apiVideo(vd, publishedById[vd.id] ?? null);
   }
 }
-export async function syncChannelViaAPI(item) {
+export async function syncChannelViaAPI(item, { knownVideoIds = [] } = {}) {
   const key = await loadYouTubeKey();
   if (!key) throw new Error("未配置 YOUTUBE_API_KEY");
   const handle = typeof item === "string" ? item : item.handle;
@@ -501,6 +502,9 @@ export async function syncChannelViaAPI(item) {
     const ids = Object.keys(pubById);
     await fetchApiVideos(key, ids, videosOut, pubById);
   }
+  // 历史 ID 可直接由 videos.list 批量回填，避免页面 watch 遭限流时逐条重试。
+  const missing = knownVideoIds.filter((id) => !Object.hasOwn(videosOut, id));
+  if (missing.length) await fetchApiVideos(key, missing, videosOut);
 
   const thumbs = sn.thumbnails ?? {};
   const avatar = [thumbs.maxres, thumbs.standard, thumbs.high, thumbs.medium, thumbs.default]

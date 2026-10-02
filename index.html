@@ -484,7 +484,7 @@ const resolveUrl = (u) => {
             <th data-k="viewsDelta" class="num">增量</th>
             <th data-k="likes" class="num">点赞</th>
             <th data-k="comments" class="num">评论</th>
-            <th data-k="shares" class="num">分享</th>
+            <th data-k="shares" class="num" title="YouTube 公开视频接口不提供分享次数">分享</th>
             <th data-k="engagement" class="num">赞播比</th>
             <th data-k="descriptionChars" class="num">简介字数</th>
           </tr>
@@ -497,7 +497,7 @@ const resolveUrl = (u) => {
 
   <footer>
     数据来自 YouTube Data API 与公开页面的每日快照 · 订阅数为公开展示精度，视频播放量优先采用 API 精确值<br/>
-    Shorts 分类来自频道页面；API 缺少的字段由公开页面或 RSS 补充
+    增量需两次有效播放量快照；分享数无公开视频接口，显示「—」；Shorts 分类来自频道页面
   </footer>
 </div>
 
@@ -596,7 +596,7 @@ if (!channelKeys.length) {
   $("error").textContent = indexError || "暂无频道数据，请检查 R2 频道索引是否已发布。";
   throw new Error("no channels");
 }
-$("updated-at").textContent = `更新于 ${new Date(latestUpdated).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })}`;
+$("updated-at").textContent = `发布于 ${new Date(latestUpdated).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })}`;
 
 const usageColor = (ratio) => ratio > 0.9 ? "var(--down)" : ratio > 0.8 ? "var(--amber)" : "var(--green)";
 const usagePctFmt = (v) => v < 10 ? v.toFixed(2) : v < 100 ? v.toFixed(1) : String(Math.round(v));
@@ -681,6 +681,8 @@ if (apiOk) {
 }
 if (staticMode) {
   $("manage-menu").style.display = "none";
+  $("refresh-btn").innerHTML = '<span class="ico">⟳</span> 检查发布';
+  $("refresh-btn").title = "只检查 R2 已发布数据，不会发起 YouTube 采集";
 }
 // V1.0A：成员即使在本机服务模式下也不能管理账号
 if (AUTH && AUTH.role !== "admin") {
@@ -830,7 +832,8 @@ const setRefresh = (html, spinning) => {
 };
 async function staticRefresh() {
   const btn = $("refresh-btn");
-  setRefresh('<span class="ico">⟳</span> 刷新中…', true);
+  btn.title = "只检查 R2 已发布数据，不会发起 YouTube 采集";
+  setRefresh('<span class="ico">⟳</span> 检查中…', true);
   refreshYouTubeUsage();
   try {
     const res = await fetch(dataUrl("data/dashboard-index.json"), { cache: "no-store" });
@@ -841,11 +844,11 @@ async function staticRefresh() {
       setTimeout(() => location.reload(), 500);
       return;
     }
-    setRefresh('<span class="ico">✓</span> 已是最新');
-    setTimeout(() => { setRefresh('<span class="ico">⟳</span> 数据刷新'); btn.disabled = false; }, 1800);
+    setRefresh('<span class="ico">✓</span> 已是最新发布');
+    setTimeout(() => { setRefresh('<span class="ico">⟳</span> 检查发布'); btn.disabled = false; }, 1800);
   } catch (e) {
-    alert("刷新失败：" + e.message);
-    setRefresh('<span class="ico">⟳</span> 数据刷新');
+    alert("检查发布数据失败：" + e.message);
+    setRefresh('<span class="ico">⟳</span> 检查发布');
     btn.disabled = false;
   }
 }
@@ -1569,7 +1572,7 @@ function renderChannel(key) {
   }
   currentRows = rows;
   const countHint = $("range-count");
-  if (countHint) countHint.textContent = `范围内发布视频 ${rows.length}/${allRows.length} 个`;
+  if (countHint) countHint.textContent = `范围内发布视频 ${rows.length}/${allRows.length} 个 · 频道采集于 ${latest.date}`;
 
   // 平台差异化
   $("k-subs-label").textContent = platform === "youtube" ? "订阅数（近似）" : "粉丝数";
