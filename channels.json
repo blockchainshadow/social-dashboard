@@ -481,14 +481,5 @@
       "游戏",
       "Steam"
     ]
-  },
-  {
-    "platform": "youtube",
-    "handle": "@YouTube",
-    "alias": "迁移验收临时频道",
-    "group": "migration-smoke",
-    "tags": [],
-    "all": true,
-    "owner": "_migration_smoke_admin"
   }
 ]
