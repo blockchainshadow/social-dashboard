@@ -275,7 +275,12 @@
     "platform": "youtube",
     "handle": "@CalmLofiRoom-l3s",
     "owner": "xiong",
-    "all": true
+    "all": true,
+    "alias": "",
+    "group": "Lofi",
+    "tags": [
+      "Lofi"
+    ]
   },
   {
     "platform": "youtube",
@@ -290,13 +295,21 @@
     "all": true,
     "tags": [
       "Lofi"
-    ]
+    ],
+    "alias": "",
+    "group": "Lofi"
   },
   {
     "platform": "youtube",
     "handle": "@chouchouhu",
     "owner": "xiong",
-    "all": true
+    "all": true,
+    "alias": "",
+    "group": "游戏",
+    "tags": [
+      "游戏制作",
+      "AI"
+    ]
   },
   {
     "platform": "youtube",
