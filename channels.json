@@ -252,7 +252,12 @@
     "platform": "youtube",
     "handle": "@L_00x00",
     "owner": "xiong",
-    "all": true
+    "all": true,
+    "alias": "",
+    "group": "Lofi",
+    "tags": [
+      "Lofi"
+    ]
   },
   {
     "platform": "youtube",
