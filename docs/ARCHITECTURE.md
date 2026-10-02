@@ -50,7 +50,7 @@
 
 Cloudflare Pages 和 GitHub Pages 是静态页面，不运行采集器；两站都向 `https://dry-flower-a30f.xyxcliff.workers.dev` 登录及提交管理操作。本地服务代理同一鉴权，并触发本机任务；非回环启动仍要求 `DASH_TOKEN`，不能用其替代普通浏览器会话。线上 TikTok 刷新返回原本地流程提示，不伪造任务完成。
 
-`index.html` 是唯一页面源码，`sync-static.sh` 单向生成 `web/index.html` 小文件镜像并调整相对模块路径；不复制完整历史或数据库。GitHub Pages 的子路径通过相对模块 URL 支持。
+`index.html` 是唯一页面源码，`sync-static.sh` 单向生成 `web/index.html` 小文件镜像并调整相对模块路径；不复制完整历史或数据库。根页及镜像默认读取相同 R2 公共地址，`?data`、`dash-data-base` 或显式 `window.DATA_BASE_URL` 才覆盖默认值。GitHub Pages 子路径通过相对模块 URL 支持；模块导入带发布版本参数，修正共享模块后同步提升版本，避免旧缓存。
 
 浏览器先读取小型索引，再按需加载当前频道历史，复用内容版本缓存。索引时间是「发布于」，视频明细另有最后有效采集时间；「检查发布」不触发采集。当前账号固定排在顶栏首位；管理员默认自己频道，「全员」切换全部。**公开数据仍可直接读取，成员过滤不是数据保密机制。**
 

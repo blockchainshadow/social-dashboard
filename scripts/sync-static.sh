@@ -12,10 +12,9 @@ if [ -f index.html ]; then
   node <<'NODE'
 const fs = require('node:fs');
 const source = fs.readFileSync('index.html', 'utf8');
-const moduleImport = 'from "./assets/dashboard-client.mjs"';
+const moduleImport = 'from "./assets/dashboard-client.mjs';
 if (!source.includes(moduleImport)) throw new Error('root dashboard module import not found');
-const mirror = source.replace(moduleImport, 'from "../assets/dashboard-client.mjs"')
-  .replace('<script type="module">', '<script>window.DATA_BASE_URL = window.DATA_BASE_URL || "../";</script>\n<script type="module">');
+const mirror = source.replace(moduleImport, 'from "../assets/dashboard-client.mjs');
 fs.writeFileSync('web/index.html', mirror);
 NODE
 fi

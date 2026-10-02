@@ -423,12 +423,12 @@
 
   <footer>
     数据来自 YouTube Data API 与公开页面的每日快照 · 订阅数为公开展示精度，视频播放量优先采用 API 精确值<br/>
-    增量需两次有效播放量快照；分享数无公开视频接口，显示「—」；Shorts 分类来自频道页面
+    增量需两次有效播放量快照；分享数无公开视频接口，显示「—」；公开 API 无法可靠确认的 Shorts/会员状态保留未知
   </footer>
 </div>
 
 <script type="module">
-import { client as dashClient, dataUrl, resolveUrl, renderPendingCard } from "./assets/dashboard-client.mjs";
+import { client as dashClient, dataUrl, resolveUrl, renderPendingCard } from "./assets/dashboard-client.mjs?v=20261002-r2";
 const $ = (id) => document.getElementById(id);
 await dashClient.init();
 const AUTH = dashClient.user;

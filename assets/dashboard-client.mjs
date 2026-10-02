@@ -4,6 +4,7 @@
 import { normalizeYouTubeHandle } from "./channel-input.mjs";
 
 const DEFAULT_RELAY = "https://dry-flower-a30f.xyxcliff.workers.dev";
+const DEFAULT_DATA_BASE = "https://pub-a05f40620ff24db7996b638d15240c4c.r2.dev";
 
 function getDataBase() {
   try {
@@ -12,9 +13,9 @@ function getDataBase() {
       try { return localStorage.getItem("dash-data-base") || ""; }
       catch { return ""; }
     })();
-    return (q || ls || window.DATA_BASE_URL || "").replace(/\/+$/, "");
+    return (q || ls || window.DATA_BASE_URL || DEFAULT_DATA_BASE).replace(/\/+$/, "");
   } catch {
-    return "";
+    return DEFAULT_DATA_BASE;
   }
 }
 

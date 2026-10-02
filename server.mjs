@@ -56,6 +56,7 @@ async function serveStatic(req, res, urlPath) {
     return sendJson(res, 404, { error: "not found" });
   }
   if (rel === "/" || rel === "") rel = "/index.html";
+  if (rel === "/web" || rel === "/web/") rel = "/web/index.html";
   if (!rel.startsWith("/") || rel.split("/").includes("..")) return sendJson(res, 404, { error: "not found" });
   const publicFile =
     ["/index.html", "/web/index.html", "/channels.json", "/cf-usage.json",

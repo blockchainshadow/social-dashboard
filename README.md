@@ -16,7 +16,7 @@ YouTube 公开数据看板：订阅、播放、点赞、评论趋势，支持频
 
 `channels.json`（Git 配置）→ 本机任务执行器 → `data/dashboard.sqlite`（权威历史与任务）→ R2 索引和按频道分片 → 浏览器。
 
-浏览器先加载频道索引，只下载当前频道历史；切换频道按需加载。YouTube 原始历史只保存在本机 SQLite，发布产物可以重建。`data/youtube-history.json` 仅作旧历史迁移输入，运行时不再写入；`web/` 不复制数据库或完整历史。
+浏览器默认读取 R2 公开数据地址（本地与双站一致），先加载频道索引，只下载当前频道历史；切换频道按需加载。`?data=<地址>` 或 `dash-data-base` 可显式覆盖数据源。YouTube 原始历史只保存在本机 SQLite，发布产物可以重建。`data/youtube-history.json` 仅作旧历史迁移输入，运行时不再写入；`web/` 不复制数据库或完整历史。
 
 - 架构：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - 运维：[docs/系统说明和操作手册-v1.1.md](docs/系统说明和操作手册-v1.1.md)
