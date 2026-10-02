@@ -454,5 +454,16 @@
       "长视频",
       "科普"
     ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@아오링고잡화점",
+    "owner": "xiong",
+    "group": "Lofi",
+    "tags": [
+      "Lofi",
+      "音乐",
+      "起号"
+    ]
   }
 ]
