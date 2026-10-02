@@ -1,4 +1,4 @@
-# 系统架构（2026-09-24 现状）
+# 系统架构（2026-10-02）
 
 可视化版：`docs/topology.html`。下文是同一内容的文字版，以代码实现为准。
 
@@ -10,7 +10,7 @@
 
 ### ① 数据源
 
-* **YouTube**：频道页 `ytInitialData`（档案 + 首屏视频）→ innertube `browse` 翻页补全（普通 + Shorts）→ `watch` 页精确播放/点赞/时长 → RSS 校准发布时间。反爬：UA + `bpctr` + 重试。
+* **YouTube**：有 API key 时先取 `channels.list` + 上传列表最近 50 条 + `videos.list` 精确统计；再从频道页 `ytInitialData` 补关键词/外链等，`all: true` 时通过 innertube 翻页枚举普通视频和 Shorts，对额外 ID 按 50 条/批用 API 补播放、点赞、时长与发布时间。API 缺失的视频沿用页面/watch/RSS；API 或配额不可用时回退页面抓取，频道页失败时仅保留 API 最近视频。Shorts 判别来自页面 Shorts 列表；无公开播放量时访问 watch 页尝试识别会员视频。页面翻页失败时全量覆盖可能不完整。
 * **TikTok**：页面内嵌 JSON 直抓 → 失败走 Jina Reader 渲染代理 → 再失败走 Playwright 无头 Chromium。WAF 限制下只能拿档案级（粉丝/获赞/头像），无视频级。
 
 ### ② 采集层（本机，cron 驱动）
@@ -26,14 +26,15 @@
 关键脚本：
 
 * `fetch-youtube.mjs`：`syncChannel`（抓）/ `mergeIntoHistory`（合并）/ `cacheAvatar`（头像落地 `web/avatars/`，SSRF 防护：仅 http(s)、15s 超时、拒文本、限 3MB）/ `saveHistory`（写 `data/youtube-history.json`）。
-* `publish-r2.sh`：增量发布。`data/*.json` 等三份 JSON 做整体 hash，未变 0.2s 跳过；头像只传 `git status` 感知到的新增（`--full` 全传）。认证复用本机 wrangler OAuth，无密钥。
+* `build-dashboard-index.mjs`：从本地完整快照生成 `data/dashboard-index.json`（频道目录、档案和版本）及 `data/channels/*.json`（各频道完整历史）；不改原始快照。
+* `publish-r2.sh`：仅在源数据变化后生成/上传变化的频道分片，分片全部成功后才发布索引，失败不更新成功标记；头像只传 `git status` 感知到的新增（`--full` 全传）。认证优先持久 Cloudflare API token，OAuth 仅应急。
 * `sync-static.sh`：根目录 ↔ `web/` 镜像同步（`web/` 是遗留副本）。
 
 ### ③ 存储层
 
-* **R2（真数据源）**：bucket `social-dashboard-data`。keys：`data/youtube-history.json`（约 93MB）、`avatars/*.jpg`（54 个，约 5MB）、`channels.json`、`users.json`、`cf-usage.json`。公读经 `r2.dev` + CORS `GET,HEAD *`。现状 0.096GB / 57 对象。
+* **R2（真数据源）**：bucket `social-dashboard-data`。前端读取 `data/dashboard-index.json`、按需读取 `data/channels/<handle-hash>.json?v=<content-hash>`；还有 `avatars/*.jpg`、`channels.json`、`users.json`、`cf-usage.json`。原单体 `data/youtube-history.json` 是旧发布产物，不再更新/请求。公读经 `r2.dev` + CORS `GET,HEAD *`。
 * **Git（代码+配置）**：`blockchainshadow/social-dashboard`，`main`。93MB 快照已 `gitignore`（本地文件保留）。`.git` 历史 2.4G（全是旧快照），clone 慢请 `--depth 1`。`v1.0a` 为浮动快照标记。
-* **本地**：`data/`、`avatars/`、`backups/`、`logs/`（运行产物，均 ignore）。
+* **本地**：`data/youtube-history.json` 是不能删的原始历史；`data/dashboard-index.json` 与 `data/channels/` 是可重建的发布产物；`avatars/`、`backups/`、`logs/` 是运行产物。
 
 ### ④ 服务层
 
@@ -57,10 +58,13 @@ Pages 单文件 25MiB 上限是数据必须放 R2 的根本原因。
 
 R2：10GB 存储 / A 类 100 万 / B 类 1000 万 / 月，流出免费。Workers：日 10 万次。Pages：月 500 构建。
 
-现状用量全部 <1%（R2 0.96% · 预估 $0.002 · 账单 $0）。风险排序：① r2.dev 公网限速（人多换自定义域）② 93MB 首屏下载（人多拆包：`summary.json` + 按频道懒加载）③ LFS 已否决（93MB 日更 10 天烧穿 1GB 配额）。
+YouTube Data API 默认 10,000 units/天（太平洋时间午夜重置）；有上传视频的频道通常从 3 units 起（`channels.list`、`playlistItems.list`、`videos.list` 各 1），全量页枚举的更多视频每 50 个 ID 再增加 1 unit。脚本本地上限默认 9000，按机器本地日期记账，不与官方 PT 日界线完全一致；详见 `docs/youtube-api-quota-research.md`。
+
+R2 公网读取延迟仍影响首屏，但索引约 129KB，只下载当前频道历史而非每次拉取 111MB 单体快照。注意频道分片随内容增长；单频道数据量大时仍可能需要进一步拆分。
 
 ## 3. 密钥面
 
-* 前端零密钥；R2 公读无密钥。
-* wrangler OAuth token 存本机（`~/Library/Preferences/.wrangler/config/default.toml`），cron 同用户复用；`gh` token 走系统钥匙串。
+* 前端零密钥；R2 公读无密钥。R2 发布脚本优先读取本机持久 Cloudflare API token；wrangler OAuth 仅作应急回退。
+* YouTube API key 从 `YOUTUBE_API_KEY` 或 `~/.config/social-dashboard/youtube-api-key` 读取；公开数据无需 OAuth。无 key 时使用页面抓取。
+* `gh` token 走系统钥匙串。
 * 远端开 `server.mjs` 必须设 `DASH_TOKEN`，否则拒绝启动（代码硬门槛）。

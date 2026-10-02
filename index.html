@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>YouTube 数据看板</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <style>
   :root {
     --bg: #0e1014;
@@ -495,8 +495,8 @@ const resolveUrl = (u) => {
   </div><!-- /video-sections -->
 
   <footer>
-    数据来自 YouTube 公开页面每日快照（无 API Key）· 订阅数为页面缩写值，总播放/点赞为精确值<br/>
-    精确发布时间来自频道 RSS（仅覆盖最近 15 个视频）· Shorts 视频的时长与简介长度页面不提供
+    数据来自 YouTube Data API 与公开页面的每日快照 · 订阅数为公开展示精度，视频播放量优先采用 API 精确值<br/>
+    Shorts 分类来自频道页面；API 缺少的字段由公开页面或 RSS 补充
   </footer>
 </div>
 
@@ -549,23 +549,38 @@ const safeHttpUrl = (u, fallback = "#") => {
   } catch { return fallback; }
 };
 
-// ---------- 加载（多平台合并） ----------
-const channels = {}; // "platform:handle" -> {platform, handle, info, records}
+// ---------- 加载索引；YouTube 视频历史只在选中频道时下载 ----------
+const channels = {}; // "platform:handle" -> {platform, handle, info, records, shardPath?, shardVersion?}
 let latestUpdated = 0;
+let manifestSignature = "";
+let indexError = "";
 let apiOk = false;
 let staticMode = false;
-for (const [platform, file] of [["youtube", "youtube-history"], ["tiktok", "tiktok-history"]]) {
-  try {
-    const res = await fetch(dataUrl(`data/${file}.json`) + `?t=${Date.now()}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+try {
+  const res = await fetch(dataUrl("data/dashboard-index.json"), { cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const index = await res.json();
+  manifestSignature = JSON.stringify(index);
+  latestUpdated = Date.parse(index.updatedAt) || 0;
+  for (const [handle, entry] of Object.entries(index.channels ?? {})) {
+    channels[`youtube:${handle}`] = {
+      platform: "youtube", handle, info: entry.info, records: [],
+      shardPath: entry.path, shardVersion: entry.version, loaded: false,
+    };
+  }
+} catch (e) {
+  indexError = `无法加载频道索引：${e.message}`;
+}
+try {
+  const res = await fetch(dataUrl("data/tiktok-history.json"));
+  if (res.ok) {
     const h = await res.json();
     latestUpdated = Math.max(latestUpdated, Date.parse(h.updatedAt) || 0);
     for (const [handle, ch] of Object.entries(h.channels ?? {})) {
-      channels[`${platform}:${handle}`] = { platform, handle, ...ch };
+      channels[`tiktok:${handle}`] = { platform: "tiktok", handle, ...ch };
     }
-  } catch {
   }
-}
+} catch {}
 const channelKeys = Object.keys(channels);
 
 // ---------- V1.0A 权限过滤（读 localStorage 会话，admin 全量，member 仅限授权频道） ----------
@@ -577,9 +592,7 @@ const authAllows = (key) =>
   !AUTH || adminAll() || AUTH.channels?.includes(key) || channels[key]?.info?.owner === AUTH.user;
 if (!channelKeys.length) {
   $("error").style.display = "block";
-  $("error").textContent = staticMode
-    ? "暂无任何频道数据。请在仓库中触发 GitHub Actions 运行采集脚本。"
-    : "暂无任何频道数据。请先运行采集脚本，或在本地服务模式下添加账号。";
+  $("error").textContent = indexError || "暂无频道数据，请检查 R2 频道索引是否已发布。";
   throw new Error("no channels");
 }
 $("updated-at").textContent = `更新于 ${new Date(latestUpdated).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })}`;
@@ -791,15 +804,10 @@ async function staticRefresh() {
   const btn = $("refresh-btn");
   setRefresh('<span class="ico">⟳</span> 刷新中…', true);
   try {
-    const res = await fetch(dataUrl("data/youtube-history.json") + "?t=" + Date.now(), { cache: "no-store" });
+    const res = await fetch(dataUrl("data/dashboard-index.json"), { cache: "no-store" });
     if (!res.ok) throw new Error("HTTP " + res.status);
-    const h = await res.json();
-    let newest = Date.parse(h.updatedAt) || 0;
-    for (const ch of Object.values(h.channels ?? {})) {
-      const rs = ch.records ?? [];
-      newest = Math.max(newest, Date.parse(rs[rs.length - 1]?.date) || 0);
-    }
-    if (newest > latestUpdated) {
+    const newest = JSON.stringify(await res.json());
+    if (newest !== manifestSignature) {
       setRefresh('<span class="ico">✓</span> 发现新数据，更新中…');
       setTimeout(() => location.reload(), 500);
       return;
@@ -1472,6 +1480,37 @@ function renderChannel(key) {
     const gm = $("growth-meta"); if (gm) gm.textContent = "";
     const rc = $("range-count"); if (rc) rc.textContent = "";
     renderTable();
+    return;
+  }
+  if (ch.shardPath && !ch.loaded) {
+    $("kpi-section").style.display = "none";
+    $("video-sections").style.display = "none";
+    $("tiktok-note").style.display = "none";
+    $("export").style.display = "none";
+    currentRows = [];
+    $("tbody").replaceChildren();
+    renderProfile(ch.platform, ch.info, null);
+    $("p-facts").textContent = "正在加载频道历史…";
+    if (!ch.loading) {
+      ch.loading = fetch(dataUrl(ch.shardPath) + "?v=" + encodeURIComponent(ch.shardVersion))
+        .then((res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.json();
+        })
+        .then((shard) => {
+          if (!Array.isArray(shard.records) || !shard.records.length) throw new Error("频道历史为空");
+          ch.records = shard.records;
+          ch.info = { ...shard.info, ...ch.info };
+          ch.loaded = true;
+        })
+        .catch((e) => {
+          if (currentKey === key) $("p-facts").textContent = `频道加载失败：${e.message}。重新选择频道可重试。`;
+        })
+        .finally(() => {
+          ch.loading = null;
+          if (ch.loaded && currentKey === key) renderChannel(key);
+        });
+    }
     return;
   }
   $("kpi-section").style.display = "";

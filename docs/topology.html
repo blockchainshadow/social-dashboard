@@ -80,12 +80,12 @@
     <rect x="280" y="260" width="280" height="170" rx="10" fill="#161920" stroke="#262b36"/>
     <text x="294" y="285" fill="#e8eaf0" font-weight="600">采集脚本 · scripts/</text>
     <text x="294" y="307" fill="#e8eaf0">fetch-youtube.mjs</text>
-    <text x="294" y="325" fill="#8b93a7">└ 精确抓前 N 视频 / 近似补全</text>
+    <text x="294" y="325" fill="#8b93a7">└ API 精确值 + 页面翻页/Shorts</text>
     <text x="294" y="347" fill="#e8eaf0">fetch-tiktok.mjs</text>
     <text x="294" y="365" fill="#8b93a7">└ 档案级（粉丝/获赞/头像）</text>
     <text x="294" y="387" fill="#e8eaf0">publish-r2.sh <tspan fill="#8b93a7">增量</tspan></text>
-    <text x="294" y="405" fill="#8b93a7">└ hash 未变跳过（空闲 0.2s）</text>
-    <text x="294" y="423" fill="#4f8cff">工具：wrangler（OAuth 免密钥）</text>
+    <text x="294" y="405" fill="#8b93a7">└ 只传变更频道，索引最后发布</text>
+    <text x="294" y="423" fill="#4f8cff">工具：wrangler + 持久 API token</text>
 
     <rect x="280" y="445" width="280" height="120" rx="10" fill="#161920" stroke="#262b36"/>
     <text x="294" y="470" fill="#e8eaf0" font-weight="600">本地管理服务</text>
@@ -104,7 +104,7 @@
     <rect x="600" y="45" width="280" height="220" rx="10" fill="#161920" stroke="#34d399"/>
     <text x="614" y="70" fill="#e8eaf0" font-weight="600">Cloudflare R2 · 真数据源 ☁️</text>
     <text x="614" y="92" fill="#e8eaf0">social-dashboard-data</text>
-    <text x="614" y="114" fill="#8b93a7">data/youtube-history.json · 93M</text>
+    <text x="614" y="114" fill="#8b93a7">dashboard-index.json + 频道分片</text>
     <text x="614" y="132" fill="#8b93a7">avatars/*.jpg · 54 个 · 5M</text>
     <text x="614" y="150" fill="#8b93a7">channels.json · users.json</text>
     <text x="614" y="168" fill="#8b93a7">cf-usage.json · 用量快照</text>
@@ -159,7 +159,7 @@
     <text x="1224" y="210" fill="#e8eaf0">C 调试覆盖</text>
     <text x="1224" y="228" fill="#8b93a7">?data=临时切源 · 顶栏 ☁️ 徽标</text>
     <text x="1224" y="246" fill="#8b93a7">悬停看限额明细 · 80% 黄 90% 红</text>
-    <text x="1224" y="268" fill="#8b93a7">首次打开需下载 93M（约半分钟）</text>
+    <text x="1224" y="268" fill="#8b93a7">首屏只读索引 + 当前频道历史</text>
     <text x="1224" y="290" fill="#8b93a7">admin 记得点 🌍 全员看全部</text>
     <text x="1224" y="312" fill="#4f8cff">覆盖：localStorage dash-data-base</text>
 
@@ -181,7 +181,7 @@
     <text x="470" y="430" fill="#8b93a7" font-size="11">构建产物 ↔</text>
     <!-- R2 → 浏览器 -->
     <line x1="880" y1="120" x2="1208" y2="150" stroke="#34d399" stroke-width="2" marker-end="url(#arg)"/>
-    <text x="900" y="110" fill="#34d399" font-size="11">公读 93M（CORS *）</text>
+    <text x="900" y="110" fill="#34d399" font-size="11">索引 + 按需分片（CORS *）</text>
     <!-- Git → Pages/GH -->
     <line x1="880" y1="330" x2="918" y2="120" stroke="#a78bfa" stroke-width="1.6" marker-end="url(#ar)"/>
     <text x="883" y="230" fill="#a78bfa" font-size="11">自动构建</text>
@@ -212,16 +212,16 @@
     <table>
       <tr><th>环节</th><th>工具</th><th>频率 / 体积</th><th>备注</th></tr>
       <tr><td>定时调度</td><td><code>cron</code>（本机）</td><td>watch 2min · daily 3:00 · usage :17</td><td><code>crontab -l</code> 可查；<code>.fetch-lock</code> 互斥</td></tr>
-      <tr><td>YT 采集</td><td><code>node</code> + <code>fetch-youtube.mjs</code>（零依赖 fetch）</td><td>逐频道；前 N 视频精确、其余近似</td><td>innertube 翻页 + RSS 校准发布时间</td></tr>
+      <tr><td>YT 采集</td><td><code>node</code> + <code>fetch-youtube.mjs</code></td><td>逐频道；API 精确值优先</td><td>页面翻页识别 Shorts + RSS/视频页补字段</td></tr>
       <tr><td>TT 采集</td><td><code>fetch-tiktok.mjs</code> → 直抓 / <code>Jina Reader</code> 代理 / <code>playwright</code> 无头</td><td>档案级（WAF 限制）</td><td><code>tiktok_sidecar.py</code> 辅助</td></tr>
-      <tr><td>发布到 R2</td><td><code>wrangler r2 object put</code>（OAuth，免密钥）+ <code>publish-r2.sh</code></td><td>增量：hash 未变 0.2s 跳过；93M 全传约 1 分钟</td><td>CORS <code>*</code>；r2.dev 生产限速但几个人够用</td></tr>
+      <tr><td>发布到 R2</td><td><code>build-dashboard-index.mjs</code> + <code>publish-r2.sh</code></td><td>只上传变化频道；索引最后上传</td><td>持久 API token 优先；R2 公读 CORS <code>*</code></td></tr>
       <tr><td>版本控制</td><td><code>git</code> + <code>gh</code></td><td>只提交配置/代码/头像；93M 已 ignore</td><td>.git 历史 2.4G（clone 用 <code>--depth 1</code>）</td></tr>
       <tr><td>静态托管</td><td><code>Cloudflare Pages</code>（Git 自动构建）+ <code>GitHub Pages</code>（备用）</td><td>push 即上线；单文件 25M 上限故数据放 R2</td><td>纯静态只读；管理回本地 :8000</td></tr>
       <tr><td>本地服务</td><td><code>server.mjs</code>（零依赖 http）</td><td>127.0.0.1:8000；<code>/api/*</code> 增删改查</td><td>非回环需 <code>DASH_TOKEN</code></td></tr>
       <tr><td>用量监控</td><td><code>fetch-cf-usage.mjs</code> → GraphQL Analytics</td><td>每小时；R2 0.096G(0.96%) · $0</td><td>顶栏 ☁️ 徽标：绿 &lt;80% · 黄 80% · 红 90%</td></tr>
       <tr><td>测试</td><td><code>jsdom</code>（tests/）</td><td>—</td><td>与线上链路无关</td></tr>
     </table>
-    <p class="note">免费额度红线：R2 10G 存储 / A 类 100 万 / B 类 1000 万 / Workers 日 10 万 / Pages 构建 500 次月。目前用量全部 &lt;1%，瓶颈只在 r2.dev 公网限速（人多后换自定义域）与 93M 首屏下载（人多后拆包）。密钥面：wrangler OAuth 存本机（cron 同用户复用），R2 公读无密钥，前端零密钥。</p>
+    <p class="note">免费额度红线：R2 10G 存储 / A 类 100 万 / B 类 1000 万 / Workers 日 10 万 / Pages 构建 500 次月。历史原文件只留在本机；浏览器先获取约 129KB 索引，再按需加载当前频道历史，不再下载 111MB 单体快照。密钥面：R2 发布优先用本机持久 API token，R2 公读和前端零密钥。</p>
   </div>
 </div>
 </body>

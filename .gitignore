@@ -21,6 +21,10 @@ data/youtube-history.json
 web/data/youtube-history.json
 data/cf-usage.json
 
+# Dashboard 发布产物（索引与按频道分片，由 build-dashboard-index.mjs 生成）
+data/dashboard-index.json
+data/channels/
+
 # 系统文件
 .DS_Store
 

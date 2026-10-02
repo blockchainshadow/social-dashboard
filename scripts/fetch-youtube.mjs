@@ -461,9 +461,30 @@ function parseISODuration(s) {
   return (+(m[1] ?? 0)) * 3600 + (+(m[2] ?? 0)) * 60 + (+(m[3] ?? 0));
 }
 
-// API 路径：channels → uploads 播放列表（近 50 条）→ videos 详情。
-// 只产出增量精确快照（近 50 条视频全精确，无近似值）；旧视频/旧快照原样保留在 history 里。
-// 已知局限：API 不区分 Shorts（新视频 shorts=false，旧快照的标记不受影响）；keywords 为空（沿用上次）。
+// API 路径先取最近 50 条；全量枚举与 API 不提供的字段由频道页、Shorts 页和 RSS 补齐。
+function apiVideo(vd, publishedFallback = null) {
+  const vs = vd.statistics ?? {};
+  return {
+    title: vd.snippet?.title ?? "",
+    views: vs.viewCount != null ? parseInt(vs.viewCount, 10) : null,
+    likes: vs.likeCount != null ? parseInt(vs.likeCount, 10) : null,
+    published: toISODate(vd.snippet?.publishedAt),
+    publishedFull: vd.snippet?.publishedAt ?? publishedFallback,
+    durationSec: parseISODuration(vd.contentDetails?.duration),
+    descriptionChars: vd.snippet?.description?.length ?? null,
+    shorts: false,
+    membersOnly: false,
+    approx: false,
+  };
+}
+
+async function fetchApiVideos(key, ids, out, publishedById = {}) {
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50);
+    const res = await ytApi(key, "videos", { part: "snippet,statistics,contentDetails", id: chunk.join(",") });
+    for (const vd of res.items ?? []) out[vd.id] = apiVideo(vd, publishedById[vd.id] ?? null);
+  }
+}
 export async function syncChannelViaAPI(item) {
   const key = await loadYouTubeKey();
   if (!key) throw new Error("未配置 YOUTUBE_API_KEY");
@@ -492,25 +513,7 @@ export async function syncChannelViaAPI(item) {
       if (id && !pubById[id]) pubById[id] = it?.contentDetails?.videoPublishedAt ?? it?.snippet?.publishedAt ?? null;
     }
     const ids = Object.keys(pubById);
-    for (let i = 0; i < ids.length; i += 50) {
-      const chunk = ids.slice(i, i + 50);
-      const v = await ytApi(key, "videos", { part: "snippet,statistics,contentDetails", id: chunk.join(",") });
-      for (const vd of v.items ?? []) {
-        const vs = vd.statistics ?? {};
-        videosOut[vd.id] = {
-          title: vd.snippet?.title ?? "",
-          views: vs.viewCount != null ? parseInt(vs.viewCount, 10) : null,
-          likes: vs.likeCount != null ? parseInt(vs.likeCount, 10) : null,
-          published: toISODate(vd.snippet?.publishedAt),
-          publishedFull: vd.snippet?.publishedAt ?? pubById[vd.id] ?? null,
-          durationSec: parseISODuration(vd.contentDetails?.duration),
-          descriptionChars: vd.snippet?.description?.length ?? null,
-          shorts: false,
-          membersOnly: false,
-          approx: false,
-        };
-      }
-    }
+    await fetchApiVideos(key, ids, videosOut, pubById);
   }
 
   const thumbs = sn.thumbnails ?? {};
@@ -549,12 +552,13 @@ export async function syncChannelViaAPI(item) {
 // ---------- 同步单个频道（供 CLI 与 server 共用） ----------
 export async function syncChannel(item, opts = {}) {
   const handle = typeof item === "string" ? item : item.handle;
-  if (await loadYouTubeKey()) {
+  const key = await loadYouTubeKey();
+  let apiResult = null;
+  if (key) {
     try {
-      return await syncChannelViaAPI(item);
+      apiResult = await syncChannelViaAPI(item);
     } catch (e) {
-      if (e instanceof QuotaExceeded || e instanceof ApiFatal) throw e;
-      console.warn(`  ! API 失败，回退页面抓取: ${e0(e)}`);
+      console.warn(`  ! API 失败，改用页面抓取: ${e0(e)}`);
     }
   }
   const all = !!item.all || !!opts.all;
@@ -562,8 +566,34 @@ export async function syncChannel(item, opts = {}) {
   const base = channelUrlBase(handle);
 
   console.log(`\n== ${handle}${all ? "（全量）" : ""} ==`);
-  const { profile, subscribers, videos: firstPage, innertube } = await fetchChannelPage(base);
-  const about = await fetchAbout(base).catch(() => ({})); // 失败不阻塞主数据
+  let page;
+  try {
+    page = await fetchChannelPage(base);
+  } catch (e) {
+    if (apiResult) {
+      console.warn(`  ! 频道页不可用，仅保留 API 最近视频: ${e0(e)}`);
+      return apiResult;
+    }
+    throw e;
+  }
+  const { profile: pageProfile, subscribers: pageSubscribers, videos: firstPage, innertube } = page;
+  const profile = apiResult ? {
+    ...pageProfile,
+    name: apiResult.profile.name,
+    channelId: apiResult.profile.channelId,
+    description: apiResult.profile.description,
+    avatar: apiResult.profile.avatar ?? pageProfile.avatar,
+    rssUrl: pageProfile.rssUrl ?? apiResult.profile.rssUrl,
+  } : pageProfile;
+  const pageAbout = await fetchAbout(base).catch(() => ({}));
+  const about = apiResult ? {
+    ...pageAbout,
+    totalViews: apiResult.about.totalViews,
+    videoCountTotal: apiResult.about.videoCountTotal,
+    joinedDate: apiResult.about.joinedDate ?? pageAbout.joinedDate,
+    country: apiResult.about.country ?? pageAbout.country,
+  } : pageAbout;
+  const subscribers = apiResult?.record.subscribers ?? pageSubscribers;
 
   // 全量模式：通过 innertube 翻页补齐普通视频与 Shorts（跨标签页全局去重，
   // 否则部分频道两个标签页返回相同内容，重复项会覆盖已抓取的精确数据）
@@ -573,6 +603,7 @@ export async function syncChannel(item, opts = {}) {
     for (const kind of ["videos", "shorts"]) {
       for (const [id, v] of await browseAll(profile.channelId, kind, innertube)) {
         if (!merged.has(id)) merged.set(id, v);
+        else if (v.shorts) merged.get(id).shorts = true;
       }
     }
     videoList = [...merged.entries()];
@@ -584,12 +615,53 @@ export async function syncChannel(item, opts = {}) {
     }
   }
 
+  // API 最近 50 条可能尚未出现在页面列表；全量时再批量查询页面枚举到的旧视频。
+  const apiVideos = apiResult?.record.videos ?? {};
+  const listed = new Set(videoList.map(([id]) => id));
+  for (const id of Object.keys(apiVideos)) {
+    if (!listed.has(id)) videoList.push([id, { title: apiVideos[id].title, viewsText: null, shorts: false }]);
+  }
+  if (apiResult) {
+    const missing = videoList.map(([id]) => id).filter((id) => !apiVideos[id]);
+    try {
+      await fetchApiVideos(key, missing, apiVideos);
+    } catch (e) {
+      console.warn(`  ! API 补全中断，剩余视频改用页面数据: ${e0(e)}`);
+    }
+  }
+
   const rss = profile.rssUrl ? await fetchRss(profile.rssUrl).catch(() => ({})) : {};
 
   const videosOut = {};
   for (let i = 0; i < videoList.length; i++) {
     const [id, meta] = videoList[i];
-    if (i < exactLimit) {
+    const api = apiVideos[id];
+    if (api) {
+      let detail = {};
+      if (api.views == null || (i < exactLimit && (
+        api.likes == null || api.published == null || api.durationSec == null || api.descriptionChars == null
+      ))) {
+        try {
+          await sleep(REQUEST_DELAY_MS);
+          detail = await fetchWatch(id);
+        } catch (e) {
+          console.warn(`  ! ${id} 页面补字段失败: ${e0(e)}`);
+        }
+      }
+      const views = api.views ?? detail.views ?? parseAbbrev(meta.viewsText);
+      videosOut[id] = {
+        ...api,
+        views,
+        likes: api.likes ?? detail.likes ?? null,
+        published: api.published ?? detail.published ?? null,
+        publishedFull: api.publishedFull ?? rss[id]?.publishedFull ?? null,
+        durationSec: api.durationSec ?? detail.durationSec ?? null,
+        descriptionChars: api.descriptionChars ?? detail.descriptionChars ?? rss[id]?.descriptionChars ?? null,
+        shorts: !!meta.shorts,
+        membersOnly: !!detail.membersOnly,
+        approx: api.views == null && detail.views == null && views != null,
+      };
+    } else if (i < exactLimit) {
       await sleep(REQUEST_DELAY_MS);
       let detail = {};
       try {
@@ -608,14 +680,13 @@ export async function syncChannel(item, opts = {}) {
         descriptionChars: detail.descriptionChars ?? r.descriptionChars ?? null,
         shorts: !!meta.shorts,
         membersOnly: !!detail.membersOnly,
-        approx: false,
+        approx: detail.views == null,
       };
     } else {
-      // 超出精确范围的老视频：只记录列表页缩写值
       let views = parseAbbrev(meta.viewsText);
       let membersOnly = false;
       if (views == null) {
-        // 列表页无播放文本：可能为会员视频/首映/被限流，逐个到 watch 页确认
+        // 会员/首映等无法从列表页获取播放量的视频需访问 watch 页。
         try {
           await sleep(REQUEST_DELAY_MS);
           const d = await fetchWatch(id);
@@ -653,6 +724,7 @@ export async function syncChannel(item, opts = {}) {
     profile,
     about,
     record,
+    source: apiResult ? "hybrid" : "youtube-page",
   };
 }
 
