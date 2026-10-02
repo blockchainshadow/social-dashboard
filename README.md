@@ -1,47 +1,65 @@
 # 社交平台数据看板（YouTube + TikTok）
 
-YouTube 公开数据看板：订阅、播放、点赞趋势 + 分组/标签管理。
+YouTube 公开数据看板：订阅、播放、点赞、评论趋势，支持频道分组、标签和成员归属。TikTok 采集流程保持原样。
 
-## 线上地址
+## 访问入口
 
 | 入口 | 地址 | 说明 |
 |---|---|---|
-| 主站（Cloudflare Pages） | `https://social-dashboard-9ya.pages.dev/` | Git push 自动构建，纯静态只读 |
-| 备用（GitHub Pages） | `https://blockchainshadow.github.io/social-dashboard/` | 同读一份 R2 数据 |
-| 本地管理 | `http://127.0.0.1:8000/web/` | `node server.mjs`，可增删账号、刷新 |
+| 主站 | https://social-dashboard-9ya.pages.dev/ | Cloudflare Pages；管理操作调用 Worker |
+| 备用站 | https://blockchainshadow.github.io/social-dashboard/ | GitHub Pages；同一 Worker、同一 R2 数据 |
+| 本地管理 | http://127.0.0.1:8000/ | `node server.mjs`；采集仍在本机执行 |
 
-> 静态站先读取小型频道索引，再只下载当前频道的历史分片；切换频道时按需加载并复用已加载的数据。admin 登录后点 `🌍 全员` 查看全部频道。
+登录后，顶栏首位显示当前账号。admin 默认查看自己名下频道，点击「全员」切换；成员只能管理自己名下频道。旧账号首次登录必须更换曾公开的旧密码；未换密前管理操作返回 403。
 
-## 数据链路（一句话）
+## 数据链路
 
-本机 cron 采集 → 直推 Cloudflare R2（真数据源）→ 浏览器从 R2 读；Git 仓库只存代码/配置/头像。
+`channels.json`（Git 配置）→ 本机任务执行器 → `data/dashboard.sqlite`（权威历史与任务）→ R2 索引和按频道分片 → 浏览器。
 
-* 可视化拓扑：`docs/topology.html`（双击打开）
-* 架构细节：`docs/ARCHITECTURE.md`
-* 运维手册（cron / R2 / Pages / 排障）：`docs/OPERATIONS.md`
+浏览器先加载频道索引，只下载当前频道历史；切换频道按需加载。YouTube 原始历史只保存在本机 SQLite，发布产物可以重建。`data/youtube-history.json` 仅作旧历史迁移输入，运行时不再写入；`web/` 不复制数据库或完整历史。
 
-## YouTube 混合采集
+- 架构：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- 运维：[docs/系统说明和操作手册-v1.1.md](docs/系统说明和操作手册-v1.1.md)
+- 官方配额研究：[docs/youtube-api-quota-research.md](docs/youtube-api-quota-research.md)
 
-`scripts/fetch-youtube.mjs` 优先用 YouTube Data API 获取频道统计及最近 50 条视频的精确播放、点赞、评论数和时长；频道页提供关键词、外链及视频列表，`channels.json` 中 `all: true` 时继续翻页枚举普通视频和 Shorts。列表里其余视频按 50 个 ID 一批从 API 补齐公开指标；API 未返回的视频沿用页面/watch/RSS 数据。公开视频接口**不提供分享数**，未开放的评论/播放指标也保持「—」而非填 0。增量须有两次有效播放量快照。频道页或翻页失败时，本次可能仅抓到 API 最近 50 条，但合并快照会保留先前已追踪的视频；旧视频显示「未更新」及最后采集日期，不表示本次刷新了它们的指标。API 不可用或达到脚本配额上限时回退页面采集；日志会提示降级。
+## 新增与刷新
 
-看完整的视频列表：在页面上方选择频道，再点「终身」。默认「7天」仅展示范围内发布的视频。线上「检查发布」只检查 R2 已发布的新快照，**不会**发起采集；上方「发布于」是索引发布时间，表格旁另显示当前频道采集日期。全量采集需在本机确保该频道配置 `all: true` 后运行 `node scripts/fetch-youtube.mjs --only @频道handle`，再运行 `bash scripts/publish-r2.sh`。本机服务的「数据刷新」会重新采集该频道；如果 YouTube 翻页失败，既有视频仍保留但指标标记「未更新」。
+本地及线上均接受 `@handle`、裸 handle、YouTube 主页链接和 `UC…` 频道 ID；Unicode 统一为 NFC。配置先保存，再返回任务，**入队不等于已采集或已发布**。
 
-密钥从 `YOUTUBE_API_KEY` 或 `~/.config/social-dashboard/youtube-api-key` 读取，不需要 Google OAuth。YouTube Data API 默认每太平洋时间自然日 10,000 units；`channels.list`、`playlistItems.list`、`videos.list` 每请求各 1 unit，失败请求也计入。脚本在发送请求前通过 `logs/.yt-quota-YYYY-MM-DD` 和目录锁跨进程预留，`YT_QUOTA_CAP` 默认为 9000、最高 9000（留 1000 units 余量）；太平洋时间午夜重置。达到上限、Google 报配额耗尽、计数文件损坏或锁超时即停用 API，回退页面采集。异常退出留下的 `logs/.yt-quota-lock-YYYY-MM-DD` 不会自动抢锁：确认所有采集进程已退出后才能手动移除该锁，**不要**清空当天计数/阻断文件。官方来源见 `docs/youtube-api-quota-research.md`。
+新增频道先取档案和最近 50 条视频，成功发布后再分页补全上传列表。刷新发现最近上传，同时对已追踪视频按 50 个 ID 一批更新公开统计。任务依次显示排队、采集中、已采集、发布中、完成或失败；只有对应频道分片和索引发布成功后才标记完成。稳定频道 ID 合并别名，重复请求关联同一任务。
 
-顶栏 `YT API` 徽标展示当天本机已预留/上限及百分比，和 Cloudflare 用量同样按超过 80% 变黄、超过 90% 变红，暂停时直接变红；`bash scripts/publish-r2.sh` 更新并发布 `data/youtube-api-usage.json`（只有日期、计数、上限、暂停状态和更新时间，不含密钥）。此限制仅涵盖**本机运行此脚本**的请求：同一 Google Cloud 项目若有其它客户端或更低的实际配额，脚本无法代它们记账，须在 Google Cloud 控制台核对项目额度/其它用量并设置相应限制。
+公开视频 API 不提供分享数，不能可靠区分 Shorts 或会员视频；未知字段保留 `null`，页面显示「—」。API 未返回的既有视频仍保留并标记最后有效采集日期，不能伪造播放增量。新执行器的 API 或配额失败会保留失败任务，不用网页数据冒充成功。
 
-## 页面数据发布
+线上「检查发布」只读取新发布的数据；管理菜单的单频道刷新会提交采集任务，由本机执行。TikTok 刷新仍走原本地流程。
 
-本机 `data/youtube-history.json` 是唯一原始历史数据，不能删除。`node scripts/build-dashboard-index.mjs` 从它生成 `data/dashboard-index.json` 与 `data/channels/*.json`（生成物不进 Git）；`bash scripts/publish-r2.sh` 仅上传变更的频道分片，**最后上传索引**。首次部署必须先确认索引及分片发布成功，再发布新版 `index.html`；发布失败会返回非零码，下次自动重试。`--full` 可补传全部分片。
+## 命令
 
-静态站每次打开只检查索引；频道分片 URL 按内容版本缓存，点击「检查发布」也只检查索引是否变更，不再下载整份历史或请求 YouTube API。若本地使用静态服务器预览，先生成索引；本地服务默认仍从 R2 读取已发布数据。
-
-## 本地开发
+要求 Node >= 22.14（`node:sqlite`）。
 
 ```bash
-node server.mjs            # 127.0.0.1:8000，管理 API 全开（仅回环）
-node server.mjs 8000       # 同上，显式端口
+node server.mjs
+npm test
+# 接收远端请求、补采新配置、执行并逐频道发布
+node scripts/run-dashboard-jobs.mjs --reconcile --queue-new --run --sync
+# 指定频道采集，直接写 SQLite；默认遵循 all 配置
+node scripts/fetch-youtube.mjs --only @频道handle
+# 强制补齐指定频道
+node scripts/fetch-youtube.mjs --only @频道handle --full
+# 发布变更分片及索引；--full 用于重传
+bash scripts/publish-r2.sh
+# 一致性快照、加密并上传；恢复到空目录，不覆盖运行库
+npm run backup
+node scripts/backup-dashboard.mjs --download backups/dashboard-时间戳.enc --target /path/to/empty-restore
 ```
 
-* 非回环访问必须设 `DASH_TOKEN`（见 `server.mjs` 顶部注释）。
-* 定时任务见 `crontab -l`：watch（2min）、daily（3:00）、用量（每小时 17 分）。
+`index.html` 是唯一页面来源；修改后运行 `bash scripts/sync-static.sh` 生成 `web/index.html` 小文件镜像。两站代码由 Git push 构建；Worker 单独运行 `npm run deploy`。
+
+## 密钥与额度
+
+YouTube key：`YOUTUBE_API_KEY` 或 `~/.config/social-dashboard/youtube-api-key`，无需 Google OAuth。默认每日 10,000 units（太平洋时间午夜重置）；本机请求前跨进程预留，默认及硬上限 9000。失败请求同样记账；配额耗尽或日志损坏时停止 API，不能清空当日计数绕过限制。顶栏显示的是本机记账，不包含同项目其它客户端。
+
+Worker 用私有 D1 校验密码和随机会话；客户端只保存会话 token，不保存密码哈希。公开历史不等于私有数据访问控制。`users.json` 已停止发布；公开 Git 历史中的旧哈希无法撤回，必须换密。
+
+`RUNNER_TOKEN` 在 Worker secret 及本机 `~/.config/social-dashboard/runner-token`；R2 发布、备份都经 Worker 绑定。加密备份密钥仅在本机 `~/.config/social-dashboard/backup-key`，须另存安全离线副本，丢失则无法恢复。文件权限 600；任何密钥、会话、SQLite、备份及日志不得提交 Git。非回环启动本地服务仍须设置 `DASH_TOKEN`；浏览器管理始终需 Worker 会话。
+
+实际定时任务以 `crontab -l` 为准：watch 每 2 分钟，daily 当前为每日 09:30，用量每小时 17 分。Git 同步锁不覆盖采集；SQLite 活进程租约防止并发执行，发布器另有活 PID 锁，不因耗时超过 15 分钟抢占。

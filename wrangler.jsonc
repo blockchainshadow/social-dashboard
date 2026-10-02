@@ -1,0 +1,13 @@
+{
+  "name": "dry-flower-a30f",
+  "main": "worker/dashboard-worker.mjs",
+  "account_id": "dae5b22149a323b7771a9cafd1bd1ce3",
+  "compatibility_date": "2026-10-02",
+  "workers_dev": true,
+  "d1_databases": [{
+    "binding": "AUTH_DB",
+    "database_name": "social-dashboard-auth",
+    "database_id": "6a00ece2-f431-4c16-bee7-3eff2134c46d"
+  }],
+  "r2_buckets": [{ "binding": "DATA", "bucket_name": "social-dashboard-data" }]
+}

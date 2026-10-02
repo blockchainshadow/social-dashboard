@@ -2,6 +2,7 @@
   "name": "social-dashboard",
   "private": true,
   "description": "YouTube + TikTok 数据看板",
+  "engines": { "node": ">=22.14.0" },
   "dependencies": {
     "playwright": "^1.62.1"
   },
@@ -11,6 +12,9 @@
   },
   "scripts": {
     "deploy": "wrangler deploy",
-    "preview": "wrangler dev"
+    "preview": "wrangler dev",
+    "test": "node --test tests/*.test.mjs",
+    "jobs": "node scripts/run-dashboard-jobs.mjs",
+    "backup": "node scripts/backup-dashboard.mjs --backup --upload"
   }
 }

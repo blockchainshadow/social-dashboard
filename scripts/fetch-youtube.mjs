@@ -1,19 +1,20 @@
 #!/usr/bin/env node
-// YouTube 频道公开数据采集（零依赖，需 Node >= 18）
-// CLI 用法: node scripts/fetch-youtube.mjs
-// 也可作为模块被 server.mjs 引用: import { syncChannel } from "..."
+// YouTube 频道公开数据采集（API 优先，配额内运行）
+// 本模块不再直接读写 JSON；数据通过 dashboard-store.mjs 持久化。
+// 导出：syncChannelInitial / syncChannelFull / syncChannelRefresh / syncChannel / cacheAvatar
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { reserve, markBlocked, QuotaExceeded } from "./youtube-quota.mjs";
+import { normalizeYouTubeHandle } from "../assets/channel-input.mjs";
 
 const CONFIG_FILE = path.resolve("channels.json");
-const DATA_FILE = path.resolve("data/youtube-history.json");
 const AVATAR_DIR = path.resolve("web/avatars");
 const REQUEST_DELAY_MS = Number(process.env.REQUEST_DELAY_MS ?? 500);
-const RECENT_EXACT = Number(process.env.RECENT_EXACT ?? 30); // 前 N 个视频抓精确数据，其余用列表近似值
+const RECENT_EXACT = Number(process.env.RECENT_EXACT ?? 30);
+const REFRESH_UPLOAD_PAGES = Number(process.env.YT_REFRESH_UPLOAD_PAGES ?? 2);
 
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
@@ -148,7 +149,6 @@ function channelUrlBase(handleOrId) {
     : `https://www.youtube.com/${handleOrId}`;
 }
 
-// 统一的视频条目解析（兼容新旧渲染器）
 function parseVideoRenderer(v) {
   return v.videoId
     ? { id: v.videoId, title: v.title?.runs?.[0]?.text ?? v.title?.simpleText ?? "", viewsText: v.viewCountText?.simpleText ?? null, shorts: false }
@@ -206,7 +206,6 @@ function extractContinuationToken(json) {
   return null;
 }
 
-// ---------- innertube browse 翻页（拉取全部视频） ----------
 const TAB_PARAMS = {
   videos: "EgZ2aWRlb3PyBgQKAjoA",
   shorts: "EgZzaG9ydHPyBgUKA5oBAA==",
@@ -245,7 +244,6 @@ async function browseAll(channelId, kind, innertube, maxPages = 400) {
   return [...seen.entries()].map(([id, v]) => [id, v]);
 }
 
-// ---------- 频道 about 页 ----------
 async function fetchAbout(base) {
   const html = await getText(`${base}/about?hl=en&gl=US`);
   let vm = null;
@@ -271,7 +269,6 @@ async function fetchAbout(base) {
   };
 }
 
-// ---------- 频道 /videos 页：档案 + 订阅数 + 首屏视频 + innertube 凭据 ----------
 async function fetchChannelPage(base) {
   const html = await getText(`${base}/videos?hl=en&gl=US`);
   const data = extractJsonAfter(html, "ytInitialData");
@@ -307,30 +304,18 @@ async function fetchChannelPage(base) {
   return { profile, subscribers, videos: [...seen.entries()], innertube };
 }
 
-// ---------- watch 页精确数据 ----------
 async function fetchWatch(videoId) {
-  let html = await getText(
-    `https://www.youtube.com/watch?v=${videoId}&hl=en&gl=US&bpctr=9999999999`
-  );
-
-  // 反爬拦截（LOGIN_REQUIRED）时重试一次，通常能轮换通过
+  let html = await getText(`https://www.youtube.com/watch?v=${videoId}&hl=en&gl=US&bpctr=9999999999`);
   if (/"status":"LOGIN_REQUIRED"/.test(html)) {
     await sleep(1500);
-    html = await getText(
-      `https://www.youtube.com/watch?v=${videoId}&hl=en&gl=US&bpctr=9999999999`
-    );
+    html = await getText(`https://www.youtube.com/watch?v=${videoId}&hl=en&gl=US&bpctr=9999999999`);
   }
-
   const pr = extractJsonAfter(html, "ytInitialPlayerResponse");
-  const viewsStr =
-    pr?.videoDetails?.viewCount ?? html.match(/"simpleText":"([\d,]+) views"/)?.[1];
+  const viewsStr = pr?.videoDetails?.viewCount ?? html.match(/"simpleText":"([\d,]+) views"/)?.[1];
   const likes = html.match(/along with ([\d,]+) other people/)?.[1];
   const publishedRaw = html.match(/"publishDate":\{"simpleText":"([^"]+)"/)?.[1];
   const lenSec = pr?.videoDetails?.lengthSeconds;
-
-  // 会员视频：页面明确提示需要付费/仅会员可见
   const membersOnly = /This video requires payment|available to this channel's members/i.test(html);
-
   let descriptionChars = null;
   const di = html.indexOf('"attributedDescription"');
   if (di !== -1) {
@@ -341,7 +326,6 @@ async function fetchWatch(videoId) {
       } catch {}
     }
   }
-
   return {
     views: viewsStr ? parseInt(viewsStr.replace(/,/g, ""), 10) : null,
     likes: likes ? parseInt(likes.replace(/,/g, ""), 10) : null,
@@ -352,7 +336,6 @@ async function fetchWatch(videoId) {
   };
 }
 
-// ---------- RSS：最近15个视频的精确发布时间 ----------
 async function fetchRss(rssUrl) {
   const xml = await getText(rssUrl);
   const out = {};
@@ -368,7 +351,6 @@ async function fetchRss(rssUrl) {
   return out;
 }
 
-// ---------- 头像本地化（带 SSRF/磁盘防护：仅 http(s)、15s 超时、拒收文本、限 3MB） ----------
 export async function cacheAvatar(url, name) {
   try {
     const u = new URL(url);
@@ -380,21 +362,20 @@ export async function cacheAvatar(url, name) {
     });
     if (!res.ok) return null;
     const ct = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
-    if (ct.startsWith("text/") || ct.includes("html")) return null;
+    const extension = ct === "image/png" ? "png" : ct === "image/webp" ? "webp"
+      : ct === "image/jpeg" || ct === "image/jpg" ? "jpg" : null;
+    if (!extension) return null;
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.length < 100 || buf.length > 3_000_000) return null;
     await mkdir(AVATAR_DIR, { recursive: true });
-    await writeFile(path.join(AVATAR_DIR, `${name}.jpg`), buf);
-    return `avatars/${name}.jpg`;
+    await writeFile(path.join(AVATAR_DIR, `${name}.${extension}`), buf);
+    return `avatars/${name}.${extension}`;
   } catch {
     return null;
   }
 }
 
-// ---------- YouTube Data API v3（配额内优先，1 call = 1 单位） ----------
-// Key 来源：$YOUTUBE_API_KEY 或 ~/.config/social-dashboard/youtube-api-key
-// 配额由 youtube-quota.mjs 管理：发送前原子预留 1 单位，失败也计数，
-// PT 午夜重置，公开快照写入 data/youtube-api-usage.json。
+// ---------- YouTube Data API v3 ----------
 async function loadYouTubeKey() {
   if (process.env.YOUTUBE_API_KEY?.trim()) return process.env.YOUTUBE_API_KEY.trim();
   try {
@@ -407,7 +388,6 @@ async function loadYouTubeKey() {
 class ApiFatal extends Error {}
 
 async function ytApi(key, endpoint, params) {
-  // 发送前跨进程原子预留 1 单位；任何预留/写入错误都 fail closed 走页面抓取。
   let quota;
   try {
     quota = await reserve({ cost: 1 });
@@ -433,7 +413,7 @@ async function ytApi(key, endpoint, params) {
       await markBlocked().catch(() => {});
       throw new QuotaExceeded(`YouTube API 配额耗尽: ${reason}`);
     }
-    if ([400, 401, 403].includes(res.status)) throw new ApiFatal(msg); // key/权限问题，回退抓取也救不了
+    if ([400, 401, 403].includes(res.status)) throw new ApiFatal(msg);
     const e = new Error(msg);
     e.apiRetryable = true;
     throw e;
@@ -447,7 +427,6 @@ function parseISODuration(s) {
   return (+(m[1] ?? 0)) * 3600 + (+(m[2] ?? 0)) * 60 + (+(m[3] ?? 0));
 }
 
-// API 路径先取最近 50 条；全量枚举与 API 不提供的字段由频道页、Shorts 页和 RSS 补齐。
 export function apiVideo(vd, publishedFallback = null) {
   const vs = vd.statistics ?? {};
   return {
@@ -459,53 +438,77 @@ export function apiVideo(vd, publishedFallback = null) {
     publishedFull: vd.snippet?.publishedAt ?? publishedFallback,
     durationSec: parseISODuration(vd.contentDetails?.duration),
     descriptionChars: vd.snippet?.description?.length ?? null,
-    shorts: false,
-    membersOnly: false,
+    shorts: null,
+    membersOnly: null,
     approx: false,
   };
 }
 
-async function fetchApiVideos(key, ids, out, publishedById = {}) {
+async function fetchApiVideos(key, ids, out, publishedById = {}, onProgress = () => {}) {
+  let fetched = 0;
   for (let i = 0; i < ids.length; i += 50) {
     const chunk = ids.slice(i, i + 50);
     const res = await ytApi(key, "videos", { part: "snippet,statistics,contentDetails", id: chunk.join(",") });
-    for (const vd of res.items ?? []) out[vd.id] = apiVideo(vd, publishedById[vd.id] ?? null);
+    for (const vd of res.items ?? []) {
+      out[vd.id] = apiVideo(vd, publishedById[vd.id] ?? null);
+      fetched++;
+    }
+    onProgress({ phase: "videos", fetched, requested: ids.length });
   }
 }
-export async function syncChannelViaAPI(item, { knownVideoIds = [] } = {}) {
-  const key = await loadYouTubeKey();
-  if (!key) throw new Error("未配置 YOUTUBE_API_KEY");
-  const handle = typeof item === "string" ? item : item.handle;
-  console.log(`\n== ${handle}（API） ==`);
+
+async function fetchPlaylistItems(key, playlistId, opts = {}) {
+  const { maxResults = Infinity, publishedById = {}, onProgress = () => {} } = opts;
+  const ids = new Set();
+  let pageToken = null;
+  let pages = 0;
+  let truncated = false;
+  const seenTokens = new Set();
+  const HARD_PAGE_LIMIT = 2000;
+  do {
+    const params = { part: "snippet,contentDetails", playlistId, maxResults: "50" };
+    if (pageToken) params.pageToken = pageToken;
+    const res = await ytApi(key, "playlistItems", params);
+    const items = res.items ?? [];
+    for (const it of items) {
+      const id = it?.contentDetails?.videoId;
+      if (id && !publishedById[id]) {
+        publishedById[id] = it?.contentDetails?.videoPublishedAt ?? it?.snippet?.publishedAt ?? null;
+      }
+      if (id) ids.add(id);
+    }
+    const next = res.nextPageToken ?? null;
+    // 空页且仍返回相同 token 时停止，避免无限循环
+    if (next && (seenTokens.has(next) || (items.length === 0 && next === pageToken))) {
+      throw new Error(`playlist pagination repeated token for ${playlistId}`);
+    }
+    if (next) seenTokens.add(next);
+    pageToken = next;
+    pages++;
+    onProgress({ phase: "playlist", pages, discovered: ids.size });
+    if (ids.size >= maxResults) {
+      truncated = !!pageToken;
+      break;
+    }
+    if (pages >= HARD_PAGE_LIMIT && pageToken) {
+      throw new Error(`playlist pagination exceeded hard page limit (${HARD_PAGE_LIMIT})`);
+    }
+  } while (pageToken);
+  return { ids: Array.from(ids), truncated };
+}
+
+async function fetchChannelByAPI(key, handle) {
   const chRes = /^UC[\w-]{20,}$/.test(handle)
     ? await ytApi(key, "channels", { part: "snippet,statistics,contentDetails", id: handle })
     : await ytApi(key, "channels", { part: "snippet,statistics,contentDetails", forHandle: handle });
   const c = chRes.items?.[0];
   if (!c) {
     const e = new Error(`API 未找到频道 ${handle}`);
-    e.apiRetryable = true; // handle 可能改名，值得回退抓取试一次
+    e.apiRetryable = true;
     throw e;
   }
   const sn = c.snippet ?? {};
   const st = c.statistics ?? {};
-  const uploadsId = c.contentDetails?.relatedPlaylists?.uploads;
-
-  const videosOut = {};
-  if (uploadsId) {
-    const pl = await ytApi(key, "playlistItems", { part: "snippet,contentDetails", playlistId: uploadsId, maxResults: "50" });
-    const items = pl.items ?? [];
-    const pubById = {};
-    for (const it of items) {
-      const id = it?.contentDetails?.videoId;
-      if (id && !pubById[id]) pubById[id] = it?.contentDetails?.videoPublishedAt ?? it?.snippet?.publishedAt ?? null;
-    }
-    const ids = Object.keys(pubById);
-    await fetchApiVideos(key, ids, videosOut, pubById);
-  }
-  // 历史 ID 可直接由 videos.list 批量回填，避免页面 watch 遭限流时逐条重试。
-  const missing = knownVideoIds.filter((id) => !Object.hasOwn(videosOut, id));
-  if (missing.length) await fetchApiVideos(key, missing, videosOut);
-
   const thumbs = sn.thumbnails ?? {};
   const avatar = [thumbs.maxres, thumbs.standard, thumbs.high, thumbs.medium, thumbs.default]
     .map((t) => t?.url).find(Boolean) ?? null;
@@ -528,6 +531,64 @@ export async function syncChannelViaAPI(item, { knownVideoIds = [] } = {}) {
     country: sn.country ?? null,
     links: [],
   };
+  return { profile, about, subscribers, uploadsId: c.contentDetails?.relatedPlaylists?.uploads };
+}
+
+export async function syncChannelViaAPI(item, { kind = "refresh", knownVideoIds = [], priorVideos = {}, onProgress = () => {} } = {}) {
+  const key = await loadYouTubeKey();
+  if (!key) throw new Error("未配置 YOUTUBE_API_KEY");
+  const handle = typeof item === "string" ? item : item.handle;
+  console.log(`\n== ${handle}（API ${kind}） ==`);
+
+  const { profile, about, subscribers, uploadsId } = await fetchChannelByAPI(key, handle);
+  if (!uploadsId && about.videoCountTotal > 0) {
+    throw new Error(`channel ${handle} reports uploads but API returned no uploads playlist`);
+  }
+
+  const publishedById = {};
+  let fetchedIds = [];
+  let truncated = false;
+  if (uploadsId) {
+    if (kind === "initial") {
+      ({ ids: fetchedIds } = await fetchPlaylistItems(key, uploadsId, { maxResults: 50, publishedById, onProgress }));
+    } else if (kind === "full") {
+      const rawCap = process.env.YT_MAX_FULL_VIDEOS;
+      const explicitCap = rawCap === undefined ? Infinity : Number(rawCap);
+      if (!Number.isInteger(explicitCap) && explicitCap !== Infinity || explicitCap <= 0) {
+        throw new Error("YT_MAX_FULL_VIDEOS must be a positive integer");
+      }
+      ({ ids: fetchedIds, truncated } = await fetchPlaylistItems(key, uploadsId, {
+        maxResults: explicitCap, publishedById, onProgress,
+      }));
+    } else {
+      ({ ids: fetchedIds } = await fetchPlaylistItems(key, uploadsId, {
+        maxResults: REFRESH_UPLOAD_PAGES * 50, publishedById, onProgress,
+      }));
+    }
+  }
+
+  const fetchedSet = new Set(fetchedIds);
+  const idsToFetch = Array.from(new Set([...fetchedIds, ...knownVideoIds.filter((id) => !fetchedSet.has(id))]));
+  const videosOut = {};
+  if (idsToFetch.length) await fetchApiVideos(key, idsToFetch, videosOut, publishedById, onProgress);
+
+  // The public API does not classify Shorts or member-only videos; preserve prior evidence.
+  const knownSet = new Set(knownVideoIds);
+  for (const [id, video] of Object.entries(videosOut)) {
+    if (!knownSet.has(id) || !priorVideos[id]) continue;
+    if (priorVideos[id].shorts != null) video.shorts = priorVideos[id].shorts;
+    if (priorVideos[id].membersOnly != null) video.membersOnly = priorVideos[id].membersOnly;
+  }
+  if (process.env.YT_CLASSIFY_SHORTS === "1") {
+    const newIds = Object.keys(videosOut).filter((id) => !knownSet.has(id));
+    const shorts = await classifyNewShorts(profile.channelId, newIds);
+    for (const id of shorts) videosOut[id].shorts = true;
+  }
+  if (truncated) {
+    onProgress({ phase: "truncated", discovered: fetchedIds.length, reason: "configured cap" });
+    throw new Error(`full collection reached YT_MAX_FULL_VIDEOS=${process.env.YT_MAX_FULL_VIDEOS}; not complete`);
+  }
+
   const record = {
     date: new Date().toISOString().slice(0, 10),
     subscribers,
@@ -539,56 +600,65 @@ export async function syncChannelViaAPI(item, { knownVideoIds = [] } = {}) {
   return { handle, platform: "youtube", profile, about, record, source: "youtube-api" };
 }
 
-// ---------- 同步单个频道（供 CLI 与 server 共用） ----------
+async function classifyNewShorts(channelId, videoIds) {
+  // Optional Shorts tab lookup, never per-video watch; failed classification remains unknown.
+  const out = new Set();
+  if (!channelId || !videoIds.length) return out;
+  try {
+    const page = await fetchChannelPage(channelUrlBase(channelId));
+    const { innertube } = page;
+    if (!innertube) return out;
+    const shorts = await browseAll(channelId, "shorts", innertube, 50);
+    const wanted = new Set(videoIds);
+    for (const [id] of shorts) {
+      if (wanted.has(id)) out.add(id);
+    }
+  } catch {
+    // Classification is advisory; missing data remains unknown.
+  }
+  return out;
+}
+
+export async function syncChannelInitial(item, opts = {}) {
+  return syncChannelViaAPI(item, { kind: "initial", ...opts });
+}
+export async function syncChannelFull(item, opts = {}) {
+  return syncChannelViaAPI(item, { kind: "full", ...opts });
+}
+export async function syncChannelRefresh(item, opts = {}) {
+  return syncChannelViaAPI(item, { kind: "refresh", ...opts });
+}
+
+// 页面抓取兜底（仅在未配置 API key 或 API 完全不可用时使用）
 export async function syncChannel(item, opts = {}) {
   const handle = typeof item === "string" ? item : item.handle;
   const key = await loadYouTubeKey();
-  let apiResult = null;
   if (key) {
     try {
-      apiResult = await syncChannelViaAPI(item);
+      return await syncChannelViaAPI(item, { kind: opts.kind ?? "refresh", knownVideoIds: opts.knownVideoIds ?? [] });
     } catch (e) {
-      console.warn(`  ! API 失败，改用页面抓取: ${e0(e)}`);
+      if (e instanceof QuotaExceeded || e instanceof ApiFatal) {
+        console.warn(`  ! API 不可用，改用页面抓取: ${e0(e)}`);
+      } else {
+        console.warn(`  ! API 失败，改用页面抓取: ${e0(e)}`);
+      }
     }
   }
+
   const all = !!item.all || !!opts.all;
   const exactLimit = opts.exactLimit ?? RECENT_EXACT;
   const base = channelUrlBase(handle);
 
-  console.log(`\n== ${handle}${all ? "（全量）" : ""} ==`);
-  let page;
-  try {
-    page = await fetchChannelPage(base);
-  } catch (e) {
-    if (apiResult) {
-      console.warn(`  ! 频道页不可用，仅保留 API 最近视频: ${e0(e)}`);
-      return apiResult;
-    }
-    throw e;
-  }
+  console.log(`\n== ${handle}${all ? "（全量/兜底）" : ""} ==`);
+  const page = await fetchChannelPage(base);
   const { profile: pageProfile, subscribers: pageSubscribers, videos: firstPage, innertube } = page;
-  const profile = apiResult ? {
-    ...pageProfile,
-    name: apiResult.profile.name,
-    channelId: apiResult.profile.channelId,
-    description: apiResult.profile.description,
-    avatar: apiResult.profile.avatar ?? pageProfile.avatar,
-    rssUrl: pageProfile.rssUrl ?? apiResult.profile.rssUrl,
-  } : pageProfile;
   const pageAbout = await fetchAbout(base).catch(() => ({}));
-  const about = apiResult ? {
-    ...pageAbout,
-    totalViews: apiResult.about.totalViews,
-    videoCountTotal: apiResult.about.videoCountTotal,
-    joinedDate: apiResult.about.joinedDate ?? pageAbout.joinedDate,
-    country: apiResult.about.country ?? pageAbout.country,
-  } : pageAbout;
-  const subscribers = apiResult?.record.subscribers ?? pageSubscribers;
+  const profile = pageProfile;
+  const about = pageAbout;
+  const subscribers = pageSubscribers;
 
-  // 全量模式：通过 innertube 翻页补齐普通视频与 Shorts（跨标签页全局去重，
-  // 否则部分频道两个标签页返回相同内容，重复项会覆盖已抓取的精确数据）
   let videoList = firstPage;
-  if (all && innertube && profile.channelId) {
+  if ((all || opts.kind === "full") && innertube && profile.channelId) {
     const merged = new Map(firstPage);
     for (const kind of ["videos", "shorts"]) {
       for (const [id, v] of await browseAll(profile.channelId, kind, innertube)) {
@@ -598,67 +668,20 @@ export async function syncChannel(item, opts = {}) {
     }
     videoList = [...merged.entries()];
   }
-  if (!all) {
-    // 非全量时保留原 Shorts 回退逻辑（首页无普通视频则取 Shorts 首屏）
-    if (firstPage.length === 0 && innertube && profile.channelId) {
-      videoList = await browseAll(profile.channelId, "shorts", innertube, 2);
-    }
-  }
-
-  // API 最近 50 条可能尚未出现在页面列表；全量时再批量查询页面枚举到的旧视频。
-  const apiVideos = apiResult?.record.videos ?? {};
-  const listed = new Set(videoList.map(([id]) => id));
-  for (const id of Object.keys(apiVideos)) {
-    if (!listed.has(id)) videoList.push([id, { title: apiVideos[id].title, viewsText: null, shorts: false }]);
-  }
-  if (apiResult) {
-    const missing = videoList.map(([id]) => id).filter((id) => !apiVideos[id]);
-    try {
-      await fetchApiVideos(key, missing, apiVideos);
-    } catch (e) {
-      console.warn(`  ! API 补全中断，剩余视频改用页面数据: ${e0(e)}`);
-    }
+  if (!videoList.length && innertube && profile.channelId) {
+    videoList = await browseAll(profile.channelId, "shorts", innertube, 2);
   }
 
   const rss = profile.rssUrl ? await fetchRss(profile.rssUrl).catch(() => ({})) : {};
-
   const videosOut = {};
   for (let i = 0; i < videoList.length; i++) {
     const [id, meta] = videoList[i];
-    const api = apiVideos[id];
-    if (api) {
-      let detail = {};
-      if (api.views == null || (i < exactLimit && (
-        api.likes == null || api.published == null || api.durationSec == null || api.descriptionChars == null
-      ))) {
-        try {
-          await sleep(REQUEST_DELAY_MS);
-          detail = await fetchWatch(id);
-        } catch (e) {
-          console.warn(`  ! ${id} 页面补字段失败: ${e0(e)}`);
-        }
-      }
-      const views = api.views ?? detail.views ?? parseAbbrev(meta.viewsText);
-      videosOut[id] = {
-        ...api,
-        views,
-        likes: api.likes ?? detail.likes ?? null,
-        published: api.published ?? detail.published ?? null,
-        publishedFull: api.publishedFull ?? rss[id]?.publishedFull ?? null,
-        durationSec: api.durationSec ?? detail.durationSec ?? null,
-        descriptionChars: api.descriptionChars ?? detail.descriptionChars ?? rss[id]?.descriptionChars ?? null,
-        shorts: !!meta.shorts,
-        membersOnly: !!detail.membersOnly,
-        approx: api.views == null && detail.views == null && views != null,
-      };
-    } else if (i < exactLimit) {
+    if (i < exactLimit) {
       await sleep(REQUEST_DELAY_MS);
       let detail = {};
       try {
         detail = await fetchWatch(id);
-      } catch (e) {
-        console.warn(`  ! ${id} 详情失败，使用近似值: ${e0(e)}`);
-      }
+      } catch {}
       const r = rss[id] ?? {};
       videosOut[id] = {
         title: meta.title,
@@ -673,31 +696,19 @@ export async function syncChannel(item, opts = {}) {
         approx: detail.views == null,
       };
     } else {
-      let views = parseAbbrev(meta.viewsText);
-      let membersOnly = false;
-      if (views == null) {
-        // 会员/首映等无法从列表页获取播放量的视频需访问 watch 页。
-        try {
-          await sleep(REQUEST_DELAY_MS);
-          const d = await fetchWatch(id);
-          views = d.views;
-          membersOnly = d.membersOnly;
-        } catch {}
-      }
       videosOut[id] = {
         title: meta.title,
-        views,
+        views: parseAbbrev(meta.viewsText),
         likes: null,
         published: null,
         publishedFull: null,
         durationSec: null,
         descriptionChars: null,
         shorts: !!meta.shorts,
-        membersOnly,
+        membersOnly: false,
         approx: true,
       };
     }
-    process.stdout.write(`  · ${i + 1}/${videoList.length} ${id}\r`);
   }
 
   const record = {
@@ -708,31 +719,10 @@ export async function syncChannel(item, opts = {}) {
     videoCountTracked: Object.keys(videosOut).length,
     videos: videosOut,
   };
-  return {
-    handle,
-    platform: "youtube",
-    profile,
-    about,
-    record,
-    source: apiResult ? "hybrid" : "youtube-page",
-  };
+  return { handle, platform: "youtube", profile, about, record, source: "youtube-page" };
 }
 
-// ---------- 历史合并与持久化 ----------
-export async function loadHistory() {
-  try {
-    return JSON.parse(await readFile(DATA_FILE, "utf8"));
-  } catch {
-    return { updatedAt: new Date().toISOString(), channels: {} };
-  }
-}
-
-export async function saveHistory(history) {
-  history.updatedAt = new Date().toISOString();
-  await mkdir(path.dirname(DATA_FILE), { recursive: true });
-  await writeFile(DATA_FILE, JSON.stringify(history, null, 2));
-}
-
+// TikTok collector still shares config read/write; channel history belongs to SQLite.
 export async function readConfig() {
   const channels = JSON.parse(await readFile(CONFIG_FILE, "utf8"));
   if (!Array.isArray(channels)) throw new Error("channels.json 格式应为数组");
@@ -743,76 +733,49 @@ export async function writeConfig(channels) {
   await writeFile(CONFIG_FILE, JSON.stringify(channels, null, 2));
 }
 
-// 页面/API 不完整时保留旧视频，但不把旧指标误认为本次采集结果。
-export function preserveTrackedVideos(record, previous) {
-  if (!previous) return;
-  for (const [id, video] of Object.entries(previous.videos ?? {})) {
-    if (!Object.hasOwn(record.videos, id)) {
-      record.videos[id] = { ...video, staleAt: video.staleAt ?? previous.date };
+async function main(args = process.argv.slice(2)) {
+  let only = null;
+  let full = false;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--full") {
+      full = true;
+    } else if (args[i] === "--only" && args[i + 1]) {
+      only = new Set(args[++i].split(",").map((raw) => {
+        const handle = normalizeYouTubeHandle(raw.trim());
+        if (!handle) throw new Error(`Invalid YouTube handle: ${raw}`);
+        return handle;
+      }));
+    } else {
+      throw new Error(`Unknown option: ${args[i]}`);
     }
   }
-  record.videoCountTracked = Object.keys(record.videos).length;
-}
-
-// 合并一条频道记录到 history 并返回该频道对象
-export function mergeIntoHistory(history, { handle, profile, about, record }) {
-  const ch = (history.channels[handle] ??= { info: {}, records: [] });
-  const previous = ch.records.findLast((r) => r.date <= record.date);
-  preserveTrackedVideos(record, previous);
-  ch.records = ch.records.filter((r) => r.date !== record.date);
-  ch.records.push(record);
-  ch.records.sort((a, b) => a.date.localeCompare(b.date));
-  const safeName = handle.replace(/[^\w-]/g, "") || "channel";
-  const info = {
-    ...profile,
-    keywords: profile.keywords?.length ? profile.keywords : (ch.info?.keywords ?? []),
-    country: about.country ?? ch.info?.country ?? null,
-    joinedDate: about.joinedDate ?? ch.info?.joinedDate ?? null,
-    links: about.links?.length ? about.links : (ch.info?.links ?? []),
-    avatarRemote: ch.info?.avatarRemote ?? null,
-  };
-  ch.info = info;
-  return { ch, safeName };
-}
-
-// ---------- CLI 主流程 ----------
-async function main() {
-  const all = await readConfig();
-  // 只处理 youtube 平台的账号（tiktok 由 fetch-tiktok.mjs 负责）
-  const onlyArg = process.argv.includes("--only") ? process.argv[process.argv.indexOf("--only") + 1] : null;
-  const only = onlyArg ? onlyArg.split(",").map((x) => (x.trim().startsWith("@") ? x.trim() : "@" + x.trim())) : null;
-  const channels = all
-    .filter((c) => (typeof c === "string" ? "youtube" : c.platform ?? "youtube") === "youtube")
-    .filter((c) => !only || only.includes(typeof c === "string" ? c : c.handle));
-  if (!channels.length) {
-    console.log("channels.json 中没有 platform=youtube 的账号");
-    return;
-  }
-
-  const history = await loadHistory();
-  for (const item of channels) {
-    try {
-      const result = await syncChannel(item);
-      const { ch, safeName } = mergeIntoHistory(history, result);
-      if (result.profile.avatar?.startsWith("http")) {
-        const remote = result.profile.avatar;
-        ch.info.avatar = (await cacheAvatar(remote, safeName)) ?? remote;
-        ch.info.avatarRemote = remote;
-      }
-      const approxN = Object.values(result.record.videos).filter((v) => v.approx).length;
-      console.log(
-        `\n  ${result.profile.name}: 订阅=${result.record.subscribers} 总播放=${result.record.channelTotalViews} ` +
-          `视频=${result.record.videoCountTracked}${approxN ? `（其中 ${approxN} 个为近似值）` : ""}`
-      );
-    } catch (e) {
-      console.error(`  ✗ 抓取失败: ${e0(e)}`);
-      process.exitCode = 1;
+  const { openStore } = await import("./dashboard-store.mjs");
+  const store = openStore();
+  try {
+    const config = await readConfig();
+    store.reconcileConfig(config);
+    const selectedHandles = only && new Set([...only].map((handle) => store.resolveHandle(handle) ?? handle));
+    let selected = 0;
+    for (const entry of config) {
+      if ((entry.platform ?? "youtube") !== "youtube") continue;
+      const normalized = normalizeYouTubeHandle(entry.handle);
+      if (selectedHandles && !selectedHandles.has(normalized) &&
+          !selectedHandles.has(store.resolveHandle(entry.handle) ?? entry.handle)) continue;
+      const kind = full ? "full" : store.hasRecords(entry.handle) ? "refresh" : "initial";
+      store.enqueue(entry.handle, kind, { ...entry });
+      selected++;
     }
+    if (only && selected === 0) throw new Error("No configured YouTube channel matched --only");
+  } finally {
+    store.close();
   }
-  await saveHistory(history);
-  console.log(`\n已写入 ${path.relative(process.cwd(), DATA_FILE)}`);
+  const { runJobs } = await import("./run-dashboard-jobs.mjs");
+  await runJobs();
 }
 
-const isDirectRun =
-  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (isDirectRun) await main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

@@ -1,73 +1,68 @@
 #!/bin/bash
-# YouTube 每日采集：每频道独立提交推送（与 watch 任务经文件锁互斥，新增频道不再排队）
-# 定位仓库根（脚本所在目录的上级），不依赖硬编码绝对路径
+# Daily YouTube refresh, incremental R2 publication, and encrypted offsite backup.
+# Git config lock never covers the collector or backup; SQLite owns its runner lease.
 cd "$(dirname "$0")/.." || exit 1
 export PATH="$HOME/.nvm/versions/node/v22.14.0/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 NODE_BIN="${NODE_BIN:-$(command -v node 2>/dev/null || echo "$HOME/.nvm/versions/node/v22.14.0/bin/node")}"
 LOG=logs/youtube-daily.log
 mkdir -p logs backups
 
-# 日志轮转（超 20MB 只留末尾 2000 行，防无限膨胀）
-for _lf in "$LOG" logs/cron.log; do
-  if [ -f "$_lf" ] && [ "$(wc -c < "$_lf" | tr -d ' ')" -gt 20971520 ]; then
-    tail -n 2000 "$_lf" > "$_lf.tmp" && mv "$_lf.tmp" "$_lf"
+for file in "$LOG" logs/cron.log; do
+  if [ -f "$file" ] && [ "$(wc -c < "$file" | tr -d ' ')" -gt 20971520 ]; then
+    tail -n 2000 "$file" > "$file.tmp" && mv "$file.tmp" "$file"
   fi
 done
 
-acquire_lock() {
-  for i in 1 2 3 4 5; do
-    if mkdir .fetch-lock 2>/dev/null; then echo $$ > .fetch-lock/pid; return 0; fi
-    if [ -n "$(find .fetch-lock -maxdepth 0 -mmin +15 2>/dev/null)" ]; then rm -rf .fetch-lock; continue; fi
-    sleep $((RANDOM % 15 + 5))
+take_lock() {
+  local i pid
+  for ((i=0; i<10; i++)); do
+    if mkdir .git-sync-lock 2>/dev/null; then
+      echo "$$" > .git-sync-lock/pid
+      return 0
+    fi
+    pid=$(cat .git-sync-lock/pid 2>/dev/null || true)
+    if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
+      rm -f .git-sync-lock/pid
+      rmdir .git-sync-lock 2>/dev/null || true
+      continue
+    fi
+    sleep 1
   done
   return 1
 }
-release_lock() { rm -rf .fetch-lock 2>/dev/null; }
-trap release_lock EXIT
+release_lock() { rm -f .git-sync-lock/pid; rmdir .git-sync-lock 2>/dev/null || true; }
 
-commit_push() {
-  local msg="$1"
-  git pull --rebase --autostash origin main >> "$LOG" 2>&1 || echo "[$(date '+%F %T')] pull 失败，继续" >> "$LOG"
-  bash scripts/sync-static.sh
-  if ! "$NODE_BIN" -e "JSON.parse(require('fs').readFileSync('channels.json','utf8'));JSON.parse(require('fs').readFileSync('data/youtube-history.json','utf8'))" 2>> "$LOG"; then
-    echo "[$(date '+%F %T')] JSON 校验失败，跳过（防止冲突标记入库）" >> "$LOG"
-    git rebase --abort 2>/dev/null
-    return 0
-  fi
-  # 数据每天收完统一推一次 R2（逐频道推 93MB 太贵），仓库只提交配置与小文件
-  git add channels.json web/channels.json users.json web/users.json avatars web/avatars 2>/dev/null
-  if ! git diff --cached --quiet; then
-    git commit -m "$msg" >> "$LOG" 2>&1
-    git pull --rebase --autostash origin main >> "$LOG" 2>&1 || { echo "[$(date '+%F %T')] pull 冲突，中止 rebase（下个频道重试）" >> "$LOG"; git rebase --abort 2>> "$LOG" || true; }
-    if git push origin main >> "$LOG" 2>&1; then
-      git push origin main:v1.0a >> "$LOG" 2>&1 || echo "[$(date '+%F %T')] push v1.0a 失败" >> "$LOG"
-    else
-      echo "[$(date '+%F %T')] push main 失败（下轮自动重试）" >> "$LOG"
+STATUS=0
+echo "[$(date '+%F %T')] === daily 开始 ===" >> "$LOG"
+if take_lock; then
+  git pull --rebase --autostash origin main >> "$LOG" 2>&1 || { echo "git pull failed; collecting with local config" >> "$LOG"; STATUS=1; }
+  release_lock
+else
+  echo "git sync busy; collecting with local config" >> "$LOG"
+fi
+
+"$NODE_BIN" scripts/run-dashboard-jobs.mjs --root "$PWD" --reconcile --queue-refresh --run --publish --sync >> "$LOG" 2>&1 || STATUS=1
+# Back up the authoritative SQLite snapshot even if one channel or publication failed.
+"$NODE_BIN" scripts/backup-dashboard.mjs --backup --upload >> "$LOG" 2>&1 || STATUS=1
+
+if take_lock; then
+  if "$NODE_BIN" -e "JSON.parse(require('fs').readFileSync('channels.json','utf8'))" >> "$LOG" 2>&1; then
+    bash scripts/sync-static.sh >> "$LOG" 2>&1 || STATUS=1
+    git add -- channels.json web/channels.json >> "$LOG" 2>&1 || STATUS=1
+    if ! git diff --cached --quiet -- channels.json web/channels.json; then
+      git commit --only -m "config: sync channels [daily]" -- channels.json web/channels.json >> "$LOG" 2>&1 || STATUS=1
+      git pull --rebase --autostash origin main >> "$LOG" 2>&1 || STATUS=1
+      if [ "$STATUS" -eq 0 ]; then
+        git push origin main >> "$LOG" 2>&1 || STATUS=1
+      fi
     fi
   else
-    echo "[$(date '+%F %T')] 配置无变更（数据已直推 R2）" >> "$LOG"
+    echo "channels.json invalid; no config commit" >> "$LOG"
+    STATUS=1
   fi
-}
-
-echo "[$(date '+%F %T')] === 每日采集开始 ===" >> "$LOG"
-git pull --rebase --autostash origin main >> "$LOG" 2>&1 || true
-
-HANDLES=$("$NODE_BIN" -e "const c=require(process.cwd()+'/channels.json');console.log(c.filter(x=>(x.platform??'youtube')==='youtube').map(x=>x.handle).join('\n'))" 2>>"$LOG")
-FAIL=0
-while IFS= read -r H; do
-  [ -z "$H" ] && continue
-  acquire_lock || { echo "[$(date '+%F %T')] $H 跳过（锁占用）" >> "$LOG"; continue; }
-  echo "[$(date '+%F %T')] === $H ===" >> "$LOG"
-  "$NODE_BIN" scripts/fetch-youtube.mjs --only "$H" >> "$LOG" 2>&1 || FAIL=1
-  commit_push "data: snapshot $H [daily $(date +%F)]"
   release_lock
-done <<< "$HANDLES"
-
-if [ -f data/youtube-history.json ]; then
-  cp data/youtube-history.json "backups/youtube-history-$(date +%F).json"
-  # 旧备份 gzip（新2份留 raw 秒恢复），7 份外连 .gz 一起清
-  ls -t backups/youtube-history-*.json 2>/dev/null | tail -n +3 | xargs gzip -f 2>/dev/null
-  ls -t backups/youtube-history-*.json* 2>/dev/null | tail -n +8 | xargs rm -f 2>/dev/null
+else
+  echo "git sync busy; config commit deferred" >> "$LOG"
 fi
-bash scripts/publish-r2.sh >> "$LOG" 2>&1
-echo "[$(date '+%F %T')] === 每日采集结束 (fail=$FAIL) ===" >> "$LOG"
+echo "[$(date '+%F %T')] === daily 结束 ===" >> "$LOG"
+exit "$STATUS"

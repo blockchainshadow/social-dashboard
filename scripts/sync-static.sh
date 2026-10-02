@@ -1,11 +1,21 @@
 #!/bin/bash
-# 根目录 = Pages 服务目录（线上唯一读取来源）；web/ 为遗留镜像副本，由本脚本统一同步
-# 定位仓库根（脚本所在目录的上级），不依赖硬编码绝对路径
+# 根目录 index.html 是唯一页面来源；web/ 仅同步小文件镜像，数据库和分片永不复制。
+set -e
 cd "$(dirname "$0")/.." || exit 1
-[ -d web/avatars ] && cp -f web/avatars/*.jpg avatars/ 2>/dev/null
-[ -f data/youtube-history.json ] && cp -f data/youtube-history.json web/data/youtube-history.json
-[ -f channels.json ] && cp -f channels.json web/channels.json
-[ -f users.json ] && cp -f users.json web/users.json
-# 双入口页面保持一致（根 index.html 与 web/index.html 内容相同）
-[ -f index.html ] && cp -f index.html web/index.html
-exit 0
+mkdir -p web/avatars
+for image in avatars/*.jpg avatars/*.png avatars/*.webp; do
+  [ -f "$image" ] || continue
+  cp -f "$image" web/avatars/
+done
+if [ -f channels.json ]; then cp -f channels.json web/channels.json; fi
+if [ -f index.html ]; then
+  node <<'NODE'
+const fs = require('node:fs');
+const source = fs.readFileSync('index.html', 'utf8');
+const moduleImport = 'from "./assets/dashboard-client.mjs"';
+if (!source.includes(moduleImport)) throw new Error('root dashboard module import not found');
+const mirror = source.replace(moduleImport, 'from "../assets/dashboard-client.mjs"')
+  .replace('<script type="module">', '<script>window.DATA_BASE_URL = window.DATA_BASE_URL || "../";</script>\n<script type="module">');
+fs.writeFileSync('web/index.html', mirror);
+NODE
+fi

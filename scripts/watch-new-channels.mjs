@@ -1,40 +1,53 @@
 #!/usr/bin/env node
-// 增量补充采集：检测 channels.json 中尚未入库的新频道，直接全量抓取
-// 由 launchd 每 2 分钟调用（watch-local.sh）；新频道添加后一次抓完，无需依赖每日任务补齐
-import { syncChannel, mergeIntoHistory, loadHistory, saveHistory, readConfig, writeConfig, cacheAvatar } from "./fetch-youtube.mjs";
+// 增量补充采集：检测 channels.json 中尚未入库的新频道，排队 initial 任务。
+// 实际采集与发布由 run-dashboard-jobs.mjs 单例 runner 完成。
+import { openStore } from "./dashboard-store.mjs";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import process from "node:process";
+import { fileURLToPath } from "node:url";
 
 const e0 = (e) => String(e?.message ?? e).slice(0, 160);
 
-const history = await loadHistory();
-const channels = await readConfig();
-const fresh = channels.filter((c) => {
-  const h = c.handle.startsWith("@") ? c.handle : "@" + c.handle;
-  return !history.channels[h];
-});
-if (fresh.length === 0) {
-  console.log("无新增频道");
-  process.exit(0);
+async function readConfig(root) {
+  const raw = await readFile(path.join(root, "channels.json"), "utf8");
+  const config = JSON.parse(raw);
+  if (!Array.isArray(config)) throw new Error("channels.json must be an array");
+  return config;
 }
-console.log(`发现新增频道: ${fresh.map((c) => c.handle).join(", ")}`);
 
-let dirty = false;
-for (const item of fresh) {
+async function main(argv = process.argv.slice(2)) {
+  const rootIdx = argv.indexOf("--root");
+  const root = rootIdx >= 0 ? argv[rootIdx + 1] : process.cwd();
+  const run = argv.includes("--run");
+
+  const config = await readConfig(root);
+  const store = openStore({ root });
   try {
-    item.all = true; // 新频道直接全量抓取，添加即完整
-    const result = await syncChannel(item);
-    const { ch, safeName } = mergeIntoHistory(history, result);
-    if (result.profile.avatar?.startsWith("http")) {
-      const remote = result.profile.avatar;
-      ch.info.avatar = (await cacheAvatar(remote, safeName)) ?? remote;
-      ch.info.avatarRemote = remote;
+    store.reconcileConfig(config);
+    const youtube = config.filter((c) => (c.platform ?? "youtube") === "youtube");
+    const newChannels = [];
+    for (const item of youtube) {
+      if (store.hasRecords(item.handle)) continue;
+      store.enqueue(item.handle, "initial", { ...item });
+      newChannels.push(item.handle);
     }
-    dirty = true;
-    console.log(`✓ ${item.handle} 全量入库`);
-  } catch (e) {
-    console.error(`✗ ${item.handle}: ${e0(e)}`);
+    console.log(JSON.stringify({ queued: newChannels.length, newChannels }));
+  } finally {
+    store.close();
+  }
+
+  if (run) {
+    const { runJobs } = await import("./run-dashboard-jobs.mjs");
+    await runJobs({ root, publish: true, sync: true });
   }
 }
-if (!dirty) process.exit(1);
-await saveHistory(history);
-await writeConfig(channels);
-console.log("快速快照已写入");
+
+const isDirectRun =
+  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isDirectRun) {
+  main().catch((e) => {
+    console.error("[watch-new-channels]", e0(e));
+    process.exit(1);
+  });
+}

@@ -21,6 +21,9 @@ data/youtube-history.json
 web/data/youtube-history.json
 data/cf-usage.json
 data/youtube-api-usage.json
+data/dashboard.sqlite*
+data/dashboard-jobs.json
+data/auth-*.json
 
 # Dashboard 发布产物（索引与按频道分片，由 build-dashboard-index.mjs 生成）
 data/dashboard-index.json
@@ -35,3 +38,7 @@ data/channels/
 !.dev.vars.example
 .env*
 !.env.example
+users.json
+web/users.json
+private-worker/
+

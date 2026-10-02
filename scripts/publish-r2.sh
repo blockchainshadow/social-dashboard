@@ -1,210 +1,159 @@
 #!/bin/bash
-# R2 增量发布（cron/手动通用）
-# 用法：bash scripts/publish-r2.sh [--full]
-#   默认：JSON/shard 只传变更部分 + 只传 git 感知到的新增/变更头像（日常 cron 用，快）
-#   --full：所有 shard/头像全传（首次建桶/修复用，慢）
-# 认证：优先 $CLOUDFLARE_API_TOKEN / ~/.config/social-dashboard/cloudflare-api-token（持久，
-#   cron 必备）；回退本机 wrangler OAuth（会过期，仅过渡）
-# 输出全走 stdout，调用方自行 >> "$LOG" 2>&1
-set -o pipefail
+# Incremental R2 publisher: immutable content-addressed shards and avatars first, index last.
+set -u -o pipefail
 cd "$(dirname "$0")/.." || exit 1
-# cron 下 PATH 极简，先补 node/wrangler 所在目录（wrangler 自身也是 node 脚本，靠 env 找 node）
 export PATH="$HOME/.nvm/versions/node/v22.14.0/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-# 持久 API token（cron 无人值守，wrangler OAuth 会过期；文件 600 权限，不进仓库）
-# 建法见 docs/系统说明和操作手册-v1.0.md §10：一枚 custom token 同时给 R2 Storage Edit + Account Analytics Read
-if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
-  for _tf in "$HOME/.config/social-dashboard/cloudflare-api-token" "$HOME/.config/social-dashboard/cloudflare-token"; do
-    if [ -f "$_tf" ]; then CLOUDFLARE_API_TOKEN="$(cat "$_tf")"; export CLOUDFLARE_API_TOKEN; break; fi
-  done
-fi
-R2_BUCKET="${R2_BUCKET:-social-dashboard-data}"
-WRANGLER_BIN="${WRANGLER_BIN:-$(command -v wrangler 2>/dev/null || echo "$HOME/.nvm/versions/node/v22.14.0/bin/wrangler")}"
+NODE_BIN="${NODE_BIN:-$(command -v node 2>/dev/null || echo "$HOME/.nvm/versions/node/v22.14.0/bin/node")}"
 FULL=0
-[ "${1:-}" = "--full" ] && FULL=1
-
-OVERALL_FAIL=0
-
-put() { # put <本地文件> <远端key> <content-type> [cache-control]
-  local cc="${4:-}"
-  if [ -n "$cc" ]; then
-    "$WRANGLER_BIN" r2 object put "${R2_BUCKET}/$2" --file "$1" --content-type "$3" --cache-control "$cc" --remote >/dev/null 2>&1
-  else
-    "$WRANGLER_BIN" r2 object put "${R2_BUCKET}/$2" --file "$1" --content-type "$3" --remote >/dev/null 2>&1
-  fi
-}
-
-filehash() { cat "$@" 2>/dev/null | (md5sum 2>/dev/null || md5 2>/dev/null) | grep -o -E '[0-9a-f]{32}' | head -n 1; }
-
-file_sha256() {
-  node -e "
-    const fs = require('fs');
-    const { createHash } = require('crypto');
-    const h = createHash('sha256');
-    const file = process.argv[1];
-    const s = fs.createReadStream(file);
-    s.on('data', c => h.update(c));
-    s.on('end', () => console.log(h.digest('hex')));
-    s.on('error', e => { console.error(e); process.exit(1); });
-  " "$1"
-}
-
-file_mtime() {
-  local m
-  m=$(stat -f %m "$1" 2>/dev/null) || m=$(stat -c %Y "$1" 2>/dev/null) || m=""
-  echo "$m"
-}
-
-file_size() {
-  local s
-  s=$(stat -f %z "$1" 2>/dev/null) || s=$(stat -c %s "$1" 2>/dev/null) || s=""
-  echo "$s"
-}
-
-json_get() {
-  node -e "
-    const file = process.argv[1];
-    const prop = process.argv[2];
-    try { const v = JSON.parse(require('fs').readFileSync(file,'utf8'))[prop]; console.log(v === undefined || v === null ? '' : v); }
-    catch { console.log(''); }
-  " "$1" "$2"
-}
-
-echo "[$(date '+%F %T')] publish-r2 开始 (bucket=${R2_BUCKET})"
+JOBS_ONLY=0
+for arg in "$@"; do
+  case "$arg" in
+    --full) FULL=1 ;;
+    --jobs-only) JOBS_ONLY=1 ;;
+    *) echo "Unknown argument: $arg" >&2; exit 2 ;;
+  esac
+done
 mkdir -p logs
-STATE_DIR="logs/.publish-r2-state"
+STATE_DIR=logs/.publish-r2-state
 mkdir -p "$STATE_DIR"
 
-# 独立发布小 JSON；只有上传成功才写 hash，失败下次会重试
-publish_plain() {
-  local file="$1" key="$2" ct="$3"
-  local cur prev hashfile
-  [ -f "$file" ] || return 0
-  hashfile="$STATE_DIR/$(echo "$key" | tr '/' '-').hash"
-  cur=$(filehash "$file")
-  prev=$(cat "$hashfile" 2>/dev/null)
-  if [ "$FULL" = 0 ] && [ -n "$cur" ] && [ -n "$prev" ] && [ "$cur" = "$prev" ]; then
-    echo "  $key 未变更，跳过"
-    return 0
-  fi
-  if put "$file" "$key" "$ct"; then
-    echo "$cur" > "$hashfile"
-    echo "  $key ok"
+# One publisher at a time: a live PID is never stolen (manual publish cannot race index).
+LOCK_DIR=logs/.publish-r2-lock
+acquire_lock() {
+  local i pid
+  for ((i=0; i<120; i++)); do
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+      printf '%s\n' "$$" > "$LOCK_DIR/pid"
+      return 0
+    fi
+    pid=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
+    if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
+      rm -f "$LOCK_DIR/pid"
+      rmdir "$LOCK_DIR" 2>/dev/null || true
+      continue
+    fi
+    sleep 1
+  done
+  echo "publisher lock busy; refusing concurrent index upload" >&2
+  return 1
+}
+acquire_lock || exit 1
+trap 'rm -f "$LOCK_DIR/pid"; rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
+
+put() {
+  if [ -n "${4:-}" ]; then
+    "$NODE_BIN" scripts/r2-object.mjs put "$1" "$2" "$3" "$4"
   else
-    echo "  $key FAIL"
-    OVERALL_FAIL=1
+    "$NODE_BIN" scripts/r2-object.mjs put "$1" "$2" "$3"
+  fi
+}
+file_hash() {
+  shasum -a 256 "$1" | cut -d ' ' -f 1
+}
+publish_plain() {
+  local file="$1" key="$2" content_type="$3" cache="${4:-}" current previous state
+  if [ ! -f "$file" ]; then
+    echo "Missing publication file: $file" >&2
     return 1
   fi
+  state="$STATE_DIR/$(printf '%s' "$key" | tr '/' '-').hash"
+  current=$(file_hash "$file") || return 1
+  previous=$(cat "$state" 2>/dev/null || true)
+  if [ "$FULL" -eq 0 ] && [ -n "$previous" ] && [ "$current" = "$previous" ]; then return 0; fi
+  put "$file" "$key" "$content_type" "$cache" || return 1
+  printf '%s\n' "$current" > "$state"
+  echo "  published $key"
 }
 
-publish_plain channels.json channels.json "application/json; charset=utf-8"
-publish_plain users.json users.json "application/json; charset=utf-8"
-publish_plain data/cf-usage.json data/cf-usage.json "application/json; charset=utf-8"
-if node scripts/youtube-quota.mjs --snapshot; then
-  publish_plain data/youtube-api-usage.json data/youtube-api-usage.json "application/json; charset=utf-8"
-else
-  echo "  YouTube 用量快照 FAIL，跳过发布"
-  OVERALL_FAIL=1
+# Completion status is published after the corresponding shard/index succeeded.
+if [ "$JOBS_ONLY" -eq 1 ]; then
+  publish_plain data/dashboard-jobs.json data/dashboard-jobs.json 'application/json; charset=utf-8'
+  exit $?
+fi
+if [ ! -f data/dashboard.sqlite ]; then
+  echo 'Missing authoritative data/dashboard.sqlite; refusing publication' >&2
+  exit 1
 fi
 
-# Dashboard：大历史拆成索引 + 按频道分片；source 字节未变且已有成功 state 时跳过 build/upload
-DASH_STATE="$STATE_DIR/dashboard-state.json"
-if [ -f data/youtube-history.json ]; then
-  SRC_HASH=$(file_sha256 data/youtube-history.json)
-  SRC_MTIME=$(file_mtime data/youtube-history.json)
-  SRC_SIZE=$(file_size data/youtube-history.json)
-  PREV_HASH=$(json_get "$DASH_STATE" sourceHash)
+echo "[$(date '+%F %T')] dashboard publish start"
+publish_plain channels.json channels.json 'application/json; charset=utf-8' || exit 1
+if [ -f data/cf-usage.json ]; then
+  publish_plain data/cf-usage.json data/cf-usage.json 'application/json; charset=utf-8' || exit 1
+fi
+publish_plain data/dashboard-jobs.json data/dashboard-jobs.json 'application/json; charset=utf-8' || exit 1
+"$NODE_BIN" scripts/youtube-quota.mjs --snapshot || exit 1
+publish_plain data/youtube-api-usage.json data/youtube-api-usage.json 'application/json; charset=utf-8' || exit 1
 
-  DASH_SKIP=0
-  if [ "$FULL" = 0 ] && [ -n "$PREV_HASH" ] && [ "$SRC_HASH" = "$PREV_HASH" ]; then
-    DASH_SKIP=1
-    echo "  dashboard source 未变更，跳过 build/upload"
-  fi
+# Upload every changed avatar before the index can refer to it. Hash state catches
+# changes even when the image was already committed to git.
+for file in web/avatars/* avatars/*; do
+  [ -f "$file" ] || continue
+  base=${file##*/}
+  case "$base" in
+    *.jpg|*.png|*.webp) ;;
+    *) continue ;;
+  esac
+  if [ "$file" = "avatars/$base" ] && [ -f "web/avatars/$base" ]; then continue; fi
+  case "$base" in
+    *.png) content_type=image/png ;;
+    *.webp) content_type=image/webp ;;
+    *) content_type=image/jpeg ;;
+  esac
+  publish_plain "$file" "avatars/$base" "$content_type" || {
+    echo "Avatar upload failed; index not published: $base" >&2
+    exit 1
+  }
+done
 
-  if [ "$DASH_SKIP" = 0 ]; then
-    if node scripts/build-dashboard-index.mjs; then
-      if [ -f data/dashboard-index.json ]; then
-        node - "$FULL" "$DASH_STATE" "$R2_BUCKET" "$WRANGLER_BIN" "$SRC_HASH" "$SRC_MTIME" "$SRC_SIZE" <<'NODE'
-const fs = require('fs');
-const { execSync } = require('child_process');
+REVISION=$("$NODE_BIN" -e "import('./scripts/dashboard-store.mjs').then(({openStore}) => { const s=openStore(); try { console.log(s.getRevision()); } finally { s.close(); } }).catch(e => { console.error(e); process.exitCode=1; })") || exit 1
+STATE="$STATE_DIR/dashboard-state.json"
+PREVIOUS=$("$NODE_BIN" -e "try { console.log(JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).publishedRevision ?? ''); } catch { console.log(''); }" "$STATE") || exit 1
+if [ "$FULL" -eq 0 ] && [ -n "$PREVIOUS" ] && [ "$REVISION" = "$PREVIOUS" ]; then
+  echo "  dashboard revision $REVISION unchanged"
+  exit 0
+fi
+"$NODE_BIN" scripts/build-dashboard-index.mjs || exit 1
+[ -f data/dashboard-index.json ] || { echo 'Builder produced no index' >&2; exit 1; }
+
+# No shell interpolation for object keys: the node helper streams directly to the
+# Worker R2 binding. Persist state only after every shard and index succeeds.
+"$NODE_BIN" - "$FULL" "$STATE" "$REVISION" <<'NODE'
+const fs = require('node:fs');
+const { spawnSync } = require('node:child_process');
 const full = process.argv[2] === '1';
 const statePath = process.argv[3];
-const bucket = process.argv[4];
-const wrangler = process.argv[5];
-const srcHash = process.argv[6];
-const srcMtime = parseInt(process.argv[7], 10) || 0;
-const srcSize = parseInt(process.argv[8], 10) || 0;
-
-function put(local, key, ct, cc) {
-  let cmd = `"${wrangler}" r2 object put "${bucket}/${key}" --file "${local}" --content-type "${ct}" --remote`;
-  if (cc) cmd += ` --cache-control "${cc}"`;
-  try {
-    execSync(cmd, { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
+const revision = Number(process.argv[4]);
+const index = JSON.parse(fs.readFileSync('data/dashboard-index.json', 'utf8'));
+let previous = {};
+try { previous = JSON.parse(fs.readFileSync(statePath, 'utf8')); } catch {}
+const versions = previous.channels ?? {};
+function put(file, key, cache) {
+  const result = spawnSync(process.execPath,
+    ['scripts/r2-object.mjs', 'put', file, key, 'application/json; charset=utf-8', cache],
+    { stdio: 'inherit' });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`R2 upload failed: ${key} (exit ${result.status})`);
 }
-
-const idx = JSON.parse(fs.readFileSync('data/dashboard-index.json', 'utf8'));
-let prev = {};
-try { prev = JSON.parse(fs.readFileSync(statePath, 'utf8')).channels || {}; } catch {}
-
-let uploaded = 0, failed = 0;
-for (const [handle, entry] of Object.entries(idx.channels)) {
-  if (!full && prev[handle] === entry.version) continue;
-  if (put(entry.path, entry.path, 'application/json; charset=utf-8', 'public, max-age=31536000, immutable')) {
+try {
+  let uploaded = 0;
+  for (const [handle, entry] of Object.entries(index.channels)) {
+    if (!full && versions[handle] === entry.version) continue;
+    put(entry.path, entry.path, 'public, max-age=31536000, immutable');
     uploaded++;
-  } else {
-    failed++;
-    console.error(`  shard FAIL: ${handle} -> ${entry.path}`);
   }
-}
-
-if (failed > 0) {
-  console.log(`  dashboard shard FAIL=${failed}，跳过索引发布`);
-  process.exit(2);
-}
-
-if (put('data/dashboard-index.json', 'data/dashboard-index.json', 'application/json; charset=utf-8', 'no-store')) {
-  const nextChannels = {};
-  for (const [h, e] of Object.entries(idx.channels)) nextChannels[h] = e.version;
-  fs.writeFileSync(statePath, JSON.stringify({
-    sourceHash: srcHash,
-    sourceMtime: srcMtime,
-    sourceSize: srcSize,
-    channels: nextChannels,
-  }, null, 2));
-  console.log(`  dashboard index ok (shards=${uploaded})`);
-} else {
-  console.log('  dashboard index FAIL');
-  process.exit(3);
+  const hash = require('node:crypto').createHash('sha256')
+    .update(fs.readFileSync('data/dashboard-index.json')).digest('hex');
+  if (full || previous.indexHash !== hash || uploaded > 0) {
+    put('data/dashboard-index.json', 'data/dashboard-index.json', 'no-store');
+  }
+  const channels = {};
+  for (const [handle, entry] of Object.entries(index.channels)) channels[handle] = entry.version;
+  const next = { publishedRevision: revision, indexHash: hash, channels };
+  fs.writeFileSync(`${statePath}.${process.pid}.tmp`, JSON.stringify(next));
+  fs.renameSync(`${statePath}.${process.pid}.tmp`, statePath);
+  console.log(`  dashboard index ready (shards=${uploaded})`);
+} catch (error) {
+  console.error(error);
+  process.exitCode = 1;
 }
 NODE
-        DASH_EXIT=$?
-        if [ "$DASH_EXIT" -ne 0 ]; then
-          echo "  dashboard publish exit=$DASH_EXIT"
-          OVERALL_FAIL=1
-        fi
-      fi
-    else
-      echo "  dashboard build FAIL"
-      OVERALL_FAIL=1
-    fi
-  fi
-else
-  echo "  data/youtube-history.json 不存在，跳过 dashboard 发布"
-fi
-
-if [ "$FULL" = 1 ]; then
-  LIST=$(for f in web/avatars/*.jpg; do [ -e "$f" ] && basename "$f"; done | sort -u)
-else
-  LIST=$(git status --porcelain -- avatars web/avatars 2>/dev/null | awk '{print $2}' | sed 's/^"//;s/"$//' | while IFS= read -r f; do [ -n "$f" ] && [ -f "$f" ] && basename "$f"; done | sort -u)
-fi
-N=0; FAIL=0
-for b in $LIST; do
-  SRC="web/avatars/$b"; [ -f "$SRC" ] || SRC="avatars/$b"; [ -f "$SRC" ] || continue
-  if put "$SRC" "avatars/$b" "image/jpeg"; then N=$((N + 1)); else FAIL=$((FAIL + 1)); echo "  avatar FAIL: $b"; fi
-done
-[ "$FAIL" -gt 0 ] && OVERALL_FAIL=1
-echo "[$(date '+%F %T')] publish-r2 结束 avatars=${N} fail=${FAIL}"
-exit $OVERALL_FAIL

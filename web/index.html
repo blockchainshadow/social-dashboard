@@ -184,7 +184,7 @@
 </style>
 </head>
 <body>
-<!-- V1.0A 身份验证登录门 -->
+<!-- 身份验证登录门 -->
 <div id="auth-gate" style="position:fixed;inset:0;background:#0d1117;display:none;align-items:center;justify-content:center;z-index:9999">
   <div style="background:#161b22;border:1px solid #30363d;border-radius:12px;padding:32px;width:320px;box-shadow:0 8px 40px rgba(0,0,0,.5)">
     <h2 style="margin:0 0 4px;font-size:18px;color:#e6edf3">🔐 数据看板登录</h2>
@@ -195,13 +195,14 @@
     <button id="auth-login" style="width:100%;padding:9px;border-radius:8px;border:0;background:#1f6feb;color:#fff;font-weight:600;cursor:pointer">登录</button>
   </div>
 </div>
-<!-- V1.0A 修改密码弹窗 -->
+<!-- 修改密码弹窗 -->
 <div id="passwd-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:10000">
   <div style="background:#161b22;border:1px solid #30363d;border-radius:12px;padding:28px;width:300px">
     <h3 style="margin:0 0 10px;font-size:16px;color:#e6edf3">🔑 修改密码</h3>
-    <p style="color:#d29922;font-size:11px;margin:0 0 10px">注意：静态版修改仅对当前浏览器生效，重装浏览器或换设备后恢复为 users.json 中的密码</p>
+    <p style="color:#d29922;font-size:11px;margin:0 0 10px">修改密码将同步到服务端，所有会话（含当前）需重新登录。</p>
     <p id="passwd-err" style="color:#f85149;font-size:12px;min-height:16px;margin:0 0 8px"></p>
-    <input id="passwd-new" type="password" placeholder="新密码（至少6位）" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:8px 10px;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#e6edf3">
+    <input id="passwd-current" type="password" placeholder="当前密码" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:8px 10px;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#e6edf3">
+    <input id="passwd-new" type="password" placeholder="新密码（至少12位）" style="width:100%;box-sizing:border-box;margin-bottom:10px;padding:8px 10px;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#e6edf3">
     <input id="passwd-confirm" type="password" placeholder="确认新密码" style="width:100%;box-sizing:border-box;margin-bottom:14px;padding:8px 10px;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#e6edf3">
     <div style="display:flex;gap:8px">
       <button id="passwd-save" style="flex:1;padding:8px;border-radius:8px;border:0;background:#238636;color:#fff;font-weight:600;cursor:pointer">保存</button>
@@ -209,89 +210,10 @@
     </div>
   </div>
 </div>
-<script>
-// ---------- R2 数据源（Cloudflare 免费版适用） ----------
-// 本地/旧 Pages 模式：留空，用相对路径 ./data/... ./avatars/...（零改动）
-// R2 为默认数据源（仓库已不再存 93MB 快照；?data= 可临时覆盖，localStorage dash-data-base 可持久覆盖）。
-window.DATA_BASE_URL = window.DATA_BASE_URL || "https://pub-a05f40620ff24db7996b638d15240c4c.r2.dev";
-const DATA_BASE = (() => {
-  const q = new URLSearchParams(location.search).get("data");
-  const ls = (() => { try { return localStorage.getItem("dash-data-base") || ""; } catch { return ""; } })();
-  return (q || ls || window.DATA_BASE_URL || "").replace(/\/+$/, "");
-})();
-const dataUrl = (p) => (DATA_BASE ? `${DATA_BASE}/${String(p).replace(/^\/+/, "")}` : String(p));
-const resolveUrl = (u) => {
-  if (!u || /^https?:\/\//i.test(u) || u.startsWith("data:") || u.startsWith("blob:")) return u;
-  return dataUrl(u);
-};
-// ---------- V1.0A 身份验证（UI 层门禁） ----------
-(async () => {
-  let users = null;
-  try {
-    users = (await fetch(dataUrl("users.json") + "?t=" + Date.now()).then((r) => r.json())).users ?? null;
-  } catch {}
-  if (!users || !users.length) return; // 未配置用户则不启用认证
-  const gate = document.getElementById("auth-gate");
-  const sha = async (s) => {
-    const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
-    return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
-  };
-  const saved = localStorage.getItem("dash-auth");
-  let session = null;
-  try { session = saved ? JSON.parse(saved) : null; } catch {}
-  const valid = session && users.some((u) => u.username === session.user);
-  if (valid) {
-    const lb = document.getElementById("auth-logout");
-    lb.style.display = "";
-    lb.textContent = "⎋ " + session.user;
-    lb.onclick = () => { localStorage.removeItem("dash-auth"); location.reload(); };
-    // 🔑 修改密码（静态版：写入本浏览器 localStorage 覆盖）
-    const pm = document.getElementById("passwd-modal");
-    document.getElementById("auth-passwd").style.display = "";
-    document.getElementById("auth-passwd").onclick = () => {
-      document.getElementById("passwd-err").textContent = "";
-      pm.style.display = "flex";
-    };
-    document.getElementById("passwd-cancel").onclick = () => { pm.style.display = "none"; };
-    document.getElementById("passwd-save").onclick = async () => {
-      const n1 = document.getElementById("passwd-new").value;
-      const n2 = document.getElementById("passwd-confirm").value;
-      const err = document.getElementById("passwd-err");
-      if (n1.length < 6) { err.textContent = "密码至少 6 位"; return; }
-      if (n1 !== n2) { err.textContent = "两次输入不一致"; return; }
-      let ov = {};
-      try { ov = JSON.parse(localStorage.getItem("dash-passwd") || "{}"); } catch {}
-      ov[session.user] = await sha(n1);
-      localStorage.setItem("dash-passwd", JSON.stringify(ov));
-      pm.style.display = "none";
-      document.getElementById("passwd-new").value = "";
-      document.getElementById("passwd-confirm").value = "";
-      alert("密码已修改（静态版本仅对当前浏览器生效）");
-    };
-    return;
-  }
-  gate.style.display = "flex";
-  const login = async () => {
-    const u = document.getElementById("auth-user").value.trim();
-    const p = document.getElementById("auth-pass").value;
-    const hp = await sha(p);
-    let overrides = {};
-    try { overrides = JSON.parse(localStorage.getItem("dash-passwd") || "{}"); } catch {}
-    const hit = users.find((x) => x.username === u && (overrides[x.username] ?? x.pass) === hp);
-    if (!hit) {
-      document.getElementById("auth-err").textContent = "用户名或密码错误";
-      return;
-    }
-    localStorage.setItem("dash-auth", JSON.stringify({ user: u, role: hit.role || "member", channels: hit.channels ?? "*", pass: hp }));
-    location.reload();
-  };
-  document.getElementById("auth-login").onclick = login;
-  document.getElementById("auth-pass").addEventListener("keydown", (e) => { if (e.key === "Enter") login(); });
-})();
-</script>
 
 <div class="topbar">
   <div class="topbar-inner">
+    <button class="btn ghost" id="auth-logout" title="退出登录" style="display:none">退出</button>
     <span class="tb-chip" id="updated-at" title="数据更新时间（你的本地时区）"></span>
     <button class="btn ghost" id="refresh-btn" title="重新加载最新数据"><span class="ico">⟳</span> <span class="lbl">数据刷新</span></button>
 
@@ -318,14 +240,12 @@ const resolveUrl = (u) => {
         <button id="menu-edit">✏️ 修改备注/分组/标签</button>
         <button id="menu-del" class="danger">🗑 删除当前账号</button>
         <button id="menu-members">👥 成员管理</button>
-        <button id="menu-token">⚙️ GitHub Token</button>
       </div>
     </div>
     <button class="btn ghost" id="export" title="导出当前明细为 CSV">⬇ CSV</button>
     <div class="tb-spacer"></div>
     <span class="tb-chip" id="cf-usage" title="Cloudflare 用量加载中…">☁️ …</span>
     <span class="tb-chip" id="yt-usage" title="YouTube API 用量加载中…">YT API …</span>
-    <button class="btn ghost" id="auth-logout" title="退出登录" style="display:none">退出</button>
     <button class="btn ghost" id="auth-passwd" title="修改密码" style="display:none">🔑 改密</button>
   </div>
 
@@ -344,6 +264,12 @@ const resolveUrl = (u) => {
     <button class="btn ghost" id="add-cancel">取消</button>
   </div>
 </div>
+
+<!-- 待处理任务 -->
+<section id="pending-section" style="display:none;margin-top:12px">
+  <div class="sec-title">任务队列 <span class="en">Pending</span></div>
+  <div id="pending-list" style="display:flex;gap:10px;flex-wrap:wrap"></div>
+</section>
 
 <div class="wrap">
   <div id="error"></div>
@@ -501,25 +427,77 @@ const resolveUrl = (u) => {
   </footer>
 </div>
 
+<script>window.DATA_BASE_URL = window.DATA_BASE_URL || "../";</script>
 <script type="module">
+import { client as dashClient, dataUrl, resolveUrl, renderPendingCard } from "../assets/dashboard-client.mjs";
 const $ = (id) => document.getElementById(id);
+await dashClient.init();
+const AUTH = dashClient.user;
 
-// ---------- 本地服务鉴权：server.mjs 配置 DASH_TOKEN 后，浏览器自动附带口令 ----------
-const _fetch = window.fetch.bind(window);
-window.fetch = (input, init = {}) => {
-  const url = typeof input === "string" ? input : input.url;
-  if (typeof url === "string" && url.startsWith("/api/") && url !== "/api/health") {
-    const t = localStorage.getItem("dash-token");
-    if (t) init = { ...init, headers: { ...(init.headers || {}), Authorization: "Bearer " + t } };
+// ---------- 登录门与改密 ----------
+const openPasswdModal = (mandatory) => {
+  const pm = $("passwd-modal");
+  $("passwd-err").textContent = "";
+  pm.style.display = "flex";
+  if (mandatory) {
+    $("passwd-cancel").style.display = "none";
+    // prevent closing by clicking outside
+    pm.dataset.mandatory = "1";
+  } else {
+    $("passwd-cancel").style.display = "";
+    pm.dataset.mandatory = "";
   }
-  return _fetch(input, init).then((res) => {
-    if (res.status === 401 && typeof url === "string" && url.startsWith("/api/")) {
-      const t = prompt("本地服务需要管理口令（服务端 DASH_TOKEN）：");
-      if (t) { localStorage.setItem("dash-token", t); location.reload(); }
-    }
-    return res;
-  });
 };
+$("passwd-modal").onclick = (e) => {
+  if (e.target === $("passwd-modal") && $("passwd-modal").dataset.mandatory) return;
+  if (e.target === $("passwd-modal")) $("passwd-modal").style.display = "none";
+};
+if (!AUTH) {
+  $("auth-gate").style.display = "flex";
+  $("auth-login").onclick = async () => {
+    const u = $("auth-user").value.trim();
+    const p = $("auth-pass").value;
+    const { ok, body } = await dashClient.login(u, p);
+    if (!ok) {
+      $("auth-err").textContent = body.error || "用户名或密码错误";
+      return;
+    }
+    location.reload();
+  };
+  $("auth-pass").addEventListener("keydown", (e) => { if (e.key === "Enter") $("auth-login").onclick(); });
+} else {
+  $("auth-logout").style.display = "";
+  $("auth-logout").textContent = "账号：" + AUTH.user + " · 退出";
+  $("auth-logout").onclick = async () => { await dashClient.logout(); location.reload(); };
+  $("auth-passwd").style.display = "";
+  $("auth-passwd").onclick = () => openPasswdModal(false);
+  if (AUTH.mustChangePassword || dashClient.passwordChangeRequired()) {
+    openPasswdModal(true);
+    // hide management until password changed
+    $("manage-menu").style.display = "none";
+    $("all-btn").style.display = "none";
+  }
+}
+$("passwd-cancel").onclick = () => { $("passwd-modal").style.display = "none"; };
+$("passwd-save").onclick = async () => {
+  const cur = $("passwd-current").value;
+  const n1 = $("passwd-new").value;
+  const n2 = $("passwd-confirm").value;
+  const err = $("passwd-err");
+  if (!cur) { err.textContent = "请输入当前密码"; return; }
+  if (n1.length < 12) { err.textContent = "新密码至少 12 位"; return; }
+  if (n1 !== n2) { err.textContent = "两次输入不一致"; return; }
+  const { ok, body } = await dashClient.changePassword(cur, n1);
+  if (!ok) { err.textContent = body.error || "修改失败"; return; }
+  $("passwd-modal").style.display = "none";
+  $("passwd-current").value = "";
+  $("passwd-new").value = "";
+  $("passwd-confirm").value = "";
+  alert("密码已修改，请用新密码重新登录");
+  await dashClient.logout();
+  location.reload();
+};
+
 const compact = new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 });
 const full = new Intl.NumberFormat("zh-CN");
 
@@ -555,8 +533,8 @@ const channels = {}; // "platform:handle" -> {platform, handle, info, records, s
 let latestUpdated = 0;
 let manifestSignature = "";
 let indexError = "";
-let apiOk = false;
-let staticMode = false;
+const apiOk = !!AUTH && !dashClient.passwordChangeRequired();
+const staticMode = !dashClient.local;
 try {
   const res = await fetch(dataUrl("data/dashboard-index.json"), { cache: "no-store" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -584,19 +562,16 @@ try {
 } catch {}
 const channelKeys = Object.keys(channels);
 
-// ---------- V1.0A 权限过滤（读 localStorage 会话，admin 全量，member 仅限授权频道） ----------
-let AUTH = null;
-try { AUTH = JSON.parse(localStorage.getItem("dash-auth") || "null"); } catch {}
-// V1.0A：默认各角色（含 admin）只看/管自己名下频道；admin 经「🌍 全员」按钮切换全员视图
+// ---------- 权限过滤（session 已验证，admin 全量，member 仅限授权频道） ----------
+// AUTH 来自已验证的 Worker 会话；公开数据对未登录用户可见
 const adminAll = () => !!AUTH && AUTH.role === "admin" && sessionStorage.getItem("dash-all") === "1";
 const authAllows = (key) =>
   !AUTH || adminAll() || AUTH.channels?.includes(key) || channels[key]?.info?.owner === AUTH.user;
-if (!channelKeys.length) {
+if (!channelKeys.length && indexError) {
   $("error").style.display = "block";
-  $("error").textContent = indexError || "暂无频道数据，请检查 R2 频道索引是否已发布。";
-  throw new Error("no channels");
+  $("error").textContent = indexError;
 }
-$("updated-at").textContent = `发布于 ${new Date(latestUpdated).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })}`;
+if (latestUpdated) $("updated-at").textContent = `发布于 ${new Date(latestUpdated).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })}`;
 
 const usageColor = (ratio) => ratio > 0.9 ? "var(--down)" : ratio > 0.8 ? "var(--amber)" : "var(--green)";
 const usagePctFmt = (v) => v < 10 ? v.toFixed(2) : v < 100 ? v.toFixed(1) : String(Math.round(v));
@@ -668,31 +643,15 @@ document.querySelectorAll("#range-seg button").forEach((b) => {
   };
 });
 
-// ---------- 账号管理（仅本地服务模式下可用） ----------
-// 必须校验响应体 {ok:true}：只看 HTTP 状态会被劫持页/缓存页误判为“本地服务在线”，
-// 误判后管理操作会 POST 到静态站的 /api 上（Pages 回 405），故宁可严格。
-try {
-  const h = await fetch("/api/health", { cache: "no-store" }).then((r) => r.json());
-  apiOk = !!(h && h.ok === true);
-} catch { apiOk = false; }
-staticMode = !apiOk;
-if (apiOk) {
-  $("manage-menu").style.display = "block";
-}
-if (staticMode) {
-  $("manage-menu").style.display = "none";
+// ---------- 账号管理 ----------
+if (apiOk) $("manage-menu").style.display = "block";
+if (staticMode && !AUTH) {
   $("refresh-btn").innerHTML = '<span class="ico">⟳</span> 检查发布';
-  $("refresh-btn").title = "只检查 R2 已发布数据，不会发起 YouTube 采集";
+  $("refresh-btn").title = "只检查已发布数据";
 }
-// V1.0A：成员即使在本机服务模式下也不能管理账号
-if (AUTH && AUTH.role !== "admin") {
-  $("manage-menu").style.display = "none";
-}
-// V1.0A：非管理员直接隐藏「成员管理」入口
 if (!AUTH || AUTH.role !== "admin") {
   $("menu-members").style.display = "none";
 }
-// V1.0A：admin「🌍 全员」开关 —— 切换全员频道管理视图（sessionStorage，刷新前有效）
 if (AUTH && AUTH.role === "admin") {
   const ab = $("all-btn");
   ab.style.display = "";
@@ -708,28 +667,41 @@ if (AUTH && AUTH.role === "admin") {
     location.reload();
   };
 }
-// 静态模式或远端数据模式（R2）：加载 channels.json 补充 alias/group/tags
-// （远端 history 里没有 baked-in 的备注信息，且无本地 API 可写，只能以配置为准）
-if (staticMode || DATA_BASE) {
-  try {
-    const cfg = await fetch(dataUrl("channels.json")).then(r => r.json());
-    for (const c of cfg) {
-      const key = `${c.platform ?? "youtube"}:${c.handle}`;
-      if (channels[key] && c.alias) channels[key].info.alias = c.alias;
-      if (channels[key] && c.group) channels[key].info.group = c.group;
-      if (channels[key] && Array.isArray(c.tags)) channels[key].info.tags = c.tags;
-      if (channels[key] && c.owner) channels[key].info.owner = c.owner;
+// Worker config is authoritative even when the published index still contains
+// an earlier channel revision; newly added channels appear pending before crawl.
+try {
+  const cfg = AUTH
+    ? (await dashClient.listChannels()).body.channels
+    : await fetch(dataUrl("channels.json"), { cache: "no-store" }).then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      });
+  if (!Array.isArray(cfg)) throw new Error("频道配置不可用");
+  const configured = new Set(cfg.map((c) => `${c.platform ?? "youtube"}:${c.handle}`));
+  for (const key of channelKeys.slice()) {
+    if (configured.has(key)) continue;
+    delete channels[key];
+    channelKeys.splice(channelKeys.indexOf(key), 1);
+  }
+  for (const c of cfg) {
+    const key = `${c.platform ?? "youtube"}:${c.handle}`;
+    if (channels[key]) {
+      for (const field of ["alias", "group", "tags", "owner"]) {
+        if (c[field]) channels[key].info[field] = c[field];
+        else delete channels[key].info[field];
+      }
+      continue;
     }
-    // V1.0A：名下频道尚无快照 → 注入占位条目，立即出现在下拉框（等待首次采集）
-    for (const c of cfg) {
-      const key = `${c.platform ?? "youtube"}:${c.handle}`;
-      if (channels[key]) continue;
-      const mine = AUTH && (adminAll() || AUTH.channels?.includes(key) || c.owner === AUTH.user);
-      if (!mine) continue;
-      channels[key] = { platform: c.platform ?? "youtube", handle: c.handle, info: { alias: c.alias, owner: c.owner, noData: true }, records: [] };
-      channelKeys.push(key);
-    }
-  } catch {}
+    const mine = AUTH && (adminAll() || AUTH.channels?.includes(key) || c.owner === AUTH.user);
+    if (!mine) continue;
+    channels[key] = {
+      platform: c.platform ?? "youtube", handle: c.handle,
+      info: { alias: c.alias, group: c.group, tags: c.tags, owner: c.owner, noData: true }, records: [],
+    };
+    channelKeys.push(key);
+  }
+} catch (error) {
+  console.error("无法加载频道配置", error);
 }
 
 // ⋯ 菜单开关与点击外部关闭
@@ -750,7 +722,6 @@ $("menu-add").onclick = () => {
 $("add-cancel").onclick = () => $("add-row").classList.remove("open");
 
 $("add-btn").addEventListener("click", async () => {
-  if (staticMode) return;
   const handle = $("new-handle").value.trim();
   const platform = $("new-platform").value;
   const all = $("all-videos").checked;
@@ -760,17 +731,14 @@ $("add-btn").addEventListener("click", async () => {
   if (!handle) return;
   const btn = $("add-btn");
   btn.disabled = true;
-  btn.textContent = all ? "全量抓取中…" : "抓取中…";
+  btn.textContent = all ? "全量提交中…" : "提交中…";
   try {
-    const res = await fetch("/api/channels", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ handle, platform, all, alias, group, tags }),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      alert(`添加失败：${j.error ?? `HTTP ${res.status}`}`);
+    const { ok, status, body } = await dashClient.addChannel({ handle, platform, all, alias, group, tags });
+    if (!ok) {
+      alert(`添加失败：${body.error ?? `HTTP ${status}`}`);
     } else {
+      $("add-row").classList.remove("open");
+      alert(body.job ? `已加入队列：${body.job.handle ?? handle}` : "已添加频道");
       location.reload();
     }
   } catch (e) {
@@ -795,22 +763,17 @@ $("meta-cancel").onclick = () => {
   $("p-editbtn").style.display = apiOk ? "flex" : "none";
 };
 $("meta-save").onclick = async () => {
-  if (staticMode) return;
   const [platform, ...rest] = currentKey.split(":");
   const handle = rest.join(":");
   const tags = [...new Set($("edit-tags").value.split(/[,，、\s]+/).map((s) => s.trim()).filter(Boolean))].slice(0, 10);
   try {
-    const res = await fetch("/api/channel-meta", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ platform, handle, alias: $("edit-alias").value, group: $("edit-group").value, tags }),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      alert(`保存失败：${j.error ?? `HTTP ${res.status}`}`);
+    const { ok, status, body } = await dashClient.updateChannel({ platform, handle, alias: $("edit-alias").value, group: $("edit-group").value, tags });
+    if (!ok) {
+      alert(`保存失败：${body.error ?? `HTTP ${status}`}`);
       return;
     }
     const info = channels[currentKey].info ?? (channels[currentKey].info = {});
+    const j = body;
     if (j.alias) info.alias = j.alias; else delete info.alias;
     if (j.group) info.group = j.group; else delete info.group;
     if (j.tags?.length) info.tags = j.tags; else delete info.tags;
@@ -856,51 +819,35 @@ $("refresh-btn").onclick = async () => {
   const btn = $("refresh-btn");
   if (btn.disabled) return;
   btn.disabled = true;
-  if (staticMode) { await staticRefresh(); return; }
+  if (!AUTH || dashClient.passwordChangeRequired()) { await staticRefresh(); return; }
   if (!currentKey) { btn.disabled = false; return; }
   const [platform, ...rest] = currentKey.split(":");
   const handle = rest.join(":");
   setRefresh('<span class="ico">⟳</span> 抓取中…（约1-2分钟）', true);
-  let fellBack = false;
   try {
-    const res = await fetch("/api/refresh", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ handle, platform }),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      if (res.status === 404 || res.status === 405) {
-        // 实际是静态站（如健康检查曾被误判）：自愈为静态模式并降级检查远端
-        staticMode = true; apiOk = false;
-        $("manage-menu").style.display = "none";
-        fellBack = true;
-        await staticRefresh();
-        return;
-      }
-      alert(`刷新失败：${j.error ?? `HTTP ${res.status}`}`);
+    const { ok, status, body } = await dashClient.refreshChannel(platform, handle);
+    if (!ok) {
+      alert(`刷新失败：${body.error ?? `HTTP ${status}`}`);
     } else {
-      location.reload();
+      alert(`已加入队列：${body.job?.handle ?? handle}`);
     }
   } catch (e) {
     alert("请求失败：" + e.message);
   } finally {
-    if (!fellBack) { setRefresh('<span class="ico">⟳</span> 数据刷新'); btn.disabled = false; }
+    setRefresh('<span class="ico">⟳</span> 数据刷新'); btn.disabled = false;
   }
 };
 
 $("menu-del").addEventListener("click", async () => {
-  if (staticMode) return;
   $("manage-menu").classList.remove("open");
   if (!currentKey) return;
   const [platform, ...rest] = currentKey.split(":");
   const handle = rest.join(":");
-  if (!confirm(`确定删除 ${currentKey} ？\n将同时删除其全部历史快照数据。`)) return;
+  if (!confirm(`确定停止跟踪 ${currentKey} 并从看板移除？\n已保存的本地历史保留用于恢复。`)) return;
   try {
-    const res = await fetch(`/api/channels/${platform}/${encodeURIComponent(handle)}`, { method: "DELETE" });
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
-      alert(`删除失败：${j.error ?? res.status}`);
+    const { ok, status, body } = await dashClient.deleteChannel(platform, handle);
+    if (!ok) {
+      alert(`删除失败：${body.error ?? status}`);
       return;
     }
     location.reload();
@@ -1511,7 +1458,7 @@ function renderChannel(key) {
     $("tiktok-note").style.display = "none";
     $("kpi-section").style.display = "none";
     renderProfile(ch.platform, ch.info, null);
-    $("p-facts").innerHTML = `<div>⏳ 频道已添加，首次数据采集中。约 5~10 分钟后刷新页面即可看到数据。</div>`;
+    $("p-facts").innerHTML = `<div>⏳ 频道已添加，首次数据采集中；发布完成后看板会自动更新。</div>`;
     const gm = $("growth-meta"); if (gm) gm.textContent = "";
     const rc = $("range-count"); if (rc) rc.textContent = "";
     renderTable();
@@ -1591,6 +1538,90 @@ function renderChannel(key) {
   }
   renderTable();
 }
+// ---------- 待处理任务 ----------
+function renderPending(jobs) {
+  const section = $("pending-section");
+  const list = $("pending-list");
+  const active = jobs.filter((j) => ["queued", "running", "collected", "publishing", "failed"].includes(j.status));
+  if (!active.length) { section.style.display = "none"; list.innerHTML = ""; return; }
+  section.style.display = "";
+  list.innerHTML = active.map(renderPendingCard).join("");
+  list.querySelectorAll(".retry-job").forEach((btn) => {
+    btn.onclick = async () => {
+      const { ok, body } = await dashClient.refreshChannel(btn.dataset.platform, btn.dataset.handle);
+      if (!ok) alert(`重试失败：${body.error ?? "未知错误"}`);
+    };
+  });
+}
+let lastPublishedJobs = new Set();
+function showJobs(jobs) {
+  renderPending(jobs);
+  const published = new Set(jobs.filter((job) => job.status === "collected" || job.status === "publishing" || job.status === "complete").map((job) => `${job.id}:${job.status}`));
+  if ([...published].some((id) => !lastPublishedJobs.has(id))) {
+    void fetch(dataUrl("data/dashboard-index.json"), { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((index) => { if (index && JSON.stringify(index) !== manifestSignature) location.reload(); })
+      .catch((error) => console.error("检查已发布数据失败", error));
+  }
+  lastPublishedJobs = published;
+}
+dashClient.on("jobs", showJobs);
+if (AUTH && !dashClient.passwordChangeRequired()) {
+  (async () => {
+    const res = await dashClient.listJobs();
+    if (res.ok) {
+      showJobs(res.body.jobs ?? []);
+      if (dashClient.hasPendingJobs()) dashClient.startPolling();
+    }
+  })().catch((error) => console.error("无法加载任务", error));
+}
+
+// ---------- 成员管理 ----------
+const membersModal = $("members-modal");
+const escM = (s) => String(s ?? "").replace(/[&<>"]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
+const renderMembers = async () => {
+  const { ok, body } = await dashClient.listMembers();
+  if (!ok) { alert("加载失败：" + (body.error ?? "未知错误")); return; }
+  const users = body.users ?? [];
+  const cfg = body.channels ?? [];
+  const byOwner = {};
+  for (const c of cfg) {
+    const owner = c.owner ?? "(无主)";
+    (byOwner[owner] ??= []).push(c);
+  }
+  const delBtn = (c) => `<button data-del="${escM((c.platform ?? "youtube") + ":" + c.handle)}" style="background:none;border:1px solid rgba(255,255,255,.2);border-radius:6px;color:#f87171;padding:2px 10px;cursor:pointer">删</button>`;
+  const row = (c) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;gap:8px"><span>▸ ${escM(c.alias || c.handle)} <span style="opacity:.45">${escM(c.handle)}</span></span>${delBtn(c)}</div>`;
+  let htmlU = users.map((u) => {
+    const owned = byOwner[u.user ?? u.username] ?? [];
+    const bound = (Array.isArray(u.channels) ? u.channels : []).filter((k) => !owned.some((c) => (c.platform ?? "youtube") + ":" + c.handle === k));
+    const body = owned.map(row).join("") || (bound.length ? bound.map((k) => `<div style="padding:4px 0;opacity:.65">▸ ${escM(k)}（绑定）</div>`).join("") : `<div style="opacity:.45;padding:4px 0">（无频道）</div>`);
+    return `<div><b>${escM(u.user ?? u.username)}</b> <span style="opacity:.55">${u.role === "admin" ? "· 管理员" : "· 成员"}</span>${body}</div>`;
+  }).join("");
+  if (byOwner["(无主)"]?.length) htmlU += `<div><b style="opacity:.7">无主频道</b>${byOwner["(无主)"].map(row).join("")}</div>`;
+  $("members-list").innerHTML = htmlU;
+  membersModal.style.display = "flex";
+};
+$("menu-members").onclick = () => {
+  if (!dashClient.isAdmin()) { alert("仅管理员可用"); return; }
+  renderMembers().catch((e) => alert("加载失败：" + e.message));
+};
+$("members-close").onclick = () => { membersModal.style.display = "none"; };
+membersModal.onclick = (e) => { if (e.target === membersModal) membersModal.style.display = "none"; };
+$("members-list").onclick = async (e) => {
+  const btn = e.target.closest("[data-del]");
+  if (!btn) return;
+  const key = btn.dataset.del;
+  if (!confirm("确定删除 " + key + " ？将同时删除其全部快照数据。")) return;
+  btn.disabled = true; btn.textContent = "…";
+  const [platform, ...rest] = key.split(":");
+  try {
+    const { ok, body } = await dashClient.deleteChannel(platform, rest.join(":"));
+    if (!ok) { alert("删除失败：" + (body.error ?? "未知错误")); btn.disabled = false; btn.textContent = "删"; return; }
+    await renderMembers();
+    setTimeout(() => location.reload(), 1200);
+  } catch (err) { alert("删除失败：" + err.message); btn.disabled = false; btn.textContent = "删"; }
+};
+
 $("channel").onchange = () => renderChannel($("channel").value);
 buildGroupFilter();
 buildTagFilter();
@@ -1617,182 +1648,6 @@ rebuildChannelSelect();
     <div id="members-list" style="display:flex;flex-direction:column;gap:14px;font-size:13px"></div>
   </div>
 </div>
-<script>
-// ---------- V1.0A 静态模式频道管理（成员/管理员统一经 Worker 中转提交，token 在服务端） ----------
-(async () => {
-  let AUTH = null;
-  try { AUTH = JSON.parse(localStorage.getItem("dash-auth") || "null"); } catch {}
-  if (!AUTH || !AUTH.user) return;
-  const isStatic = await fetch("/api/health").then((r) => !r.ok).catch(() => true);
-  if (!isStatic) return; // 本地服务模式由模块脚本处理
 
-  const RELAY = "https://dry-flower-a30f.xyxcliff.workers.dev";
-  const $ = (id) => document.getElementById(id);
-  if (!AUTH.pass) {
-    alert("登录凭证已过期（旧版会话），请点击右上角退出后重新登录一次");
-    return;
-  }
-  const relay = (payload) =>
-    fetch(RELAY, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: AUTH.user, pass: AUTH.pass, ...payload }),
-    }).then(async (r) => ({ ok: r.ok, body: await r.json().catch(() => ({})) }));
-
-  // 静态模式下保持管理菜单可见（模块脚本会将其隐藏，轮询保活）
-  const showMenu = () => { $("manage-menu").style.display = "block"; };
-  showMenu();
-  const iv = setInterval(() => { if ($("manage-menu").style.display === "none") showMenu(); }, 300);
-  setTimeout(() => clearInterval(iv), 15000);
-
-  // Token 方案已由中转取代，隐藏入口
-  $("menu-token").style.display = "none";
-
-  // ✏️ 修改备注/分组/标签：仅频道 owner（或 admin 全员模式）可编辑，经中转更新 channels.json
-  $("menu-edit").onclick = async () => {
-    $("manage-menu").classList.remove("open");
-    const key = $("channel").value;
-    if (!key) return;
-    let cfg;
-    try { cfg = await fetch(dataUrl("channels.json") + "?t=" + Date.now()).then((r) => r.json()); } catch { alert("读取频道配置失败"); return; }
-    const [platform, ...rest] = key.split(":");
-    const handle = rest.join(":");
-    const item = (cfg ?? []).find((c) => (c.platform ?? "youtube") === platform && c.handle === handle);
-    const isOwner = !!(item && item.owner === AUTH.user);
-    const allMode = sessionStorage.getItem("dash-all") === "1" && AUTH.role === "admin";
-    if (!isOwner && !allMode) { alert("只能编辑自己名下的频道"); return; }
-    const a = prompt("修改备注名（留空 = 不修改）", item?.alias ?? "");
-    if (a === null) return;
-    const g = prompt("修改分组（留空 = 取消分组）", item?.group ?? "");
-    if (g === null) return;
-    const t = prompt("修改标签（逗号分隔，可留空）", (item?.tags ?? []).join(","));
-    if (t === null) return;
-    try {
-      const payload = { action: "update", platform, handle, group: g.trim(), tags: [...new Set(t.split(/[,，、\s]+/).map((x) => x.trim()).filter(Boolean))] };
-      const alias = a.trim();
-      if (alias) payload.alias = alias; // 留空=不修改（不清掉原备注名）
-      const { ok, body } = await relay(payload);
-      if (!ok) { alert("保存失败：" + (body.error ?? "未知错误")); return; }
-      alert("已保存。约 1 分钟后点「⟳ 数据刷新」生效。");
-    } catch (e) { alert("请求失败：" + e.message); }
-  };
-
-  // 👥 成员管理（仅管理员）：展示成员及其名下/绑定频道，可直接删除
-  const membersModal = $("members-modal");
-  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[m]));
-  const renderMembers = async () => {
-    const [users, cfg] = await Promise.all([
-      fetch(dataUrl("users.json") + "?t=" + Date.now()).then((r) => r.json()),
-      fetch(dataUrl("channels.json") + "?t=" + Date.now()).then((r) => r.json()),
-    ]);
-    const byOwner = {};
-    for (const c of cfg) {
-      const owner = c.owner ?? "(无主)";
-      (byOwner[owner] ??= []).push(c);
-    }
-    const delBtn = (c) =>
-      `<button data-del="${esc((c.platform ?? "youtube") + ":" + c.handle)}" style="background:none;border:1px solid rgba(255,255,255,.2);border-radius:6px;color:#f87171;padding:2px 10px;cursor:pointer">删</button>`;
-    const row = (c) =>
-      `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;gap:8px">
-         <span>▸ ${esc(c.alias || c.handle)} <span style="opacity:.45">${esc(c.handle)}</span></span>${delBtn(c)}
-       </div>`;
-    let html = (users.users ?? []).map((u) => {
-      const owned = byOwner[u.username] ?? [];
-      const bound = (Array.isArray(u.channels) ? u.channels : []).filter(
-        (k) => !owned.some((c) => (c.platform ?? "youtube") + ":" + c.handle === k)
-      );
-      const body = owned.map(row).join("") ||
-        (bound.length ? bound.map((k) => `<div style="padding:4px 0;opacity:.65">▸ ${esc(k)}（绑定）</div>`).join("") : `<div style="opacity:.45;padding:4px 0">（无频道）</div>`);
-      return `<div><b>${esc(u.username)}</b> <span style="opacity:.55">${u.role === "admin" ? "· 管理员" : "· 成员"}</span>${body}</div>`;
-    }).join("");
-    if (byOwner["(无主)"]?.length) {
-      html += `<div><b style="opacity:.7">无主频道</b>${byOwner["(无主)"].map(row).join("")}</div>`;
-    }
-    $("members-list").innerHTML = html;
-    membersModal.style.display = "flex";
-  };
-  $("menu-members").onclick = () => {
-    if (AUTH.role !== "admin") { alert("仅管理员可用"); return; }
-    renderMembers().catch((e) => alert("加载失败：" + e.message));
-  };
-  $("members-close").onclick = () => { membersModal.style.display = "none"; };
-  membersModal.onclick = (e) => { if (e.target === membersModal) membersModal.style.display = "none"; };
-  $("members-list").onclick = async (e) => {
-    const btn = e.target.closest("[data-del]");
-    if (!btn) return;
-    const key = btn.dataset.del;
-    if (!confirm("确定删除 " + key + " ？将同时删除其全部快照数据。")) return;
-    btn.disabled = true; btn.textContent = "…";
-    const [platform, ...rest] = key.split(":");
-    try {
-      const { ok, body } = await relay({ action: "delete", platform, handle: rest.join(":") });
-      if (!ok) {
-        alert("删除失败：" + (body.error ?? "未知错误"));
-        btn.disabled = false; btn.textContent = "删";
-        return;
-      }
-      await renderMembers();
-      setTimeout(() => location.reload(), 1200);
-    } catch (err) {
-      alert("删除失败：" + err.message);
-      btn.disabled = false; btn.textContent = "删";
-    }
-  };
-
-  // 添加账号 → 中转提交 channels.json（member 自动 owner=自己；admin 可指定 owner）
-  $("add-btn").onclick = async () => {
-    const handle = $("new-handle").value.trim();
-    const platform = $("new-platform").value;
-    const alias = $("new-alias").value.trim();
-    const group = $("new-group").value.trim();
-    const tags = [...new Set($("new-tags").value.split(/[,，、\s]+/).map((s) => s.trim()).filter(Boolean))];
-    if (!handle) return;
-    if (!handle.startsWith("@") && !handle.startsWith("UC")) $("new-handle").value = handle = "@" + handle;
-    const btn = $("add-btn");
-    btn.disabled = true;
-    btn.textContent = "提交中…";
-    try {
-      const { ok, body } = await relay({ action: "add", platform, handle, alias, group, tags });
-      if (!ok) {
-        alert("添加失败：" + (body.error ?? "未知错误"));
-        return;
-      }
-      $("add-row").classList.remove("open");
-      alert(body.mine ? "该频道已在你的管理中。" : "已提交到 GitHub。\n频道数据将在下次每日快照（每日 9:30 自动抓取）后出现在看板。");
-    } catch (e) {
-      alert("添加失败：" + e.message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "开始抓取";
-    }
-  };
-
-  // 删除当前账号 → 中转（member 仅限 owner==自己，服务端强制校验）
-  $("menu-del").onclick = async () => {
-    $("manage-menu").classList.remove("open");
-    const key = $("channel").value;
-    if (!key) return;
-    const [platform, ...rest] = key.split(":");
-    const handle = rest.join(":");
-    if (!confirm("确定删除 " + key + " ？\n若该频道尚无数据将仅移除占位；若有数据将同时删除全部快照。")) return;
-    $("menu-del").disabled = true;
-    $("menu-del").textContent = "删除中…";
-    try {
-      const { ok, body } = await relay({ action: "delete", platform, handle });
-      if (!ok) {
-        alert("删除失败：" + (body.error ?? "未知错误"));
-        return;
-      }
-      alert("已提交删除，页面即将刷新生效（Pages 构建约需 1 分钟）。");
-      setTimeout(() => location.reload(), 1500);
-    } catch (e) {
-      alert("删除失败：" + e.message);
-    } finally {
-      $("menu-del").disabled = false;
-      $("menu-del").textContent = "🗑 删除当前账号";
-    }
-  };
-})();
-</script>
 </body>
 </html>
