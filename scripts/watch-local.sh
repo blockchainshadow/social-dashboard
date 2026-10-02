@@ -35,7 +35,7 @@ bash scripts/publish-r2.sh >> "$LOG" 2>&1
 git add channels.json web/channels.json users.json web/users.json avatars web/avatars >> "$LOG" 2>&1
 if ! git diff --cached --quiet; then
   git commit -m "data: quick snapshot for newly added channels [watch]" >> "$LOG" 2>&1
-  git pull --rebase --autostash origin main >> "$LOG" 2>&1 || { echo "[$(date '+%F %T')] pull 冲突，中止 rebase 下轮重试" >> "$LOG"; git rebase --abort 2>> "$LOG" || true; git reset -q --hard origin/main 2>/dev/null; exit 0; }
+  git pull --rebase --autostash origin main >> "$LOG" 2>&1 || { echo "[$(date '+%F %T')] pull 冲突：只 abort 不 reset（reset 会丢本地提交，等人工合），本轮跳过" >> "$LOG"; git rebase --abort 2>> "$LOG" || true; exit 0; }
   if git push origin main >> "$LOG" 2>&1; then
     git push origin main:v1.0a >> "$LOG" 2>&1 || echo "[$(date '+%F %T')] push v1.0a 失败" >> "$LOG"
     echo "[$(date '+%F %T')] 已推送" >> "$LOG"
