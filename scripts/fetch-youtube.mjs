@@ -7,6 +7,7 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
+import { reserve, markBlocked, QuotaExceeded } from "./youtube-quota.mjs";
 
 const CONFIG_FILE = path.resolve("channels.json");
 const DATA_FILE = path.resolve("data/youtube-history.json");
@@ -392,7 +393,8 @@ export async function cacheAvatar(url, name) {
 
 // ---------- YouTube Data API v3（配额内优先，1 call = 1 单位） ----------
 // Key 来源：$YOUTUBE_API_KEY 或 ~/.config/social-dashboard/youtube-api-key
-// 每日预算 YT_QUOTA_CAP（默认 9000/10000），记账文件 logs/.yt-quota-YYYYMMDD，超限即停（不烧完）。
+// 配额由 youtube-quota.mjs 管理：发送前原子预留 1 单位，失败也计数，
+// PT 午夜重置，公开快照写入 data/youtube-api-usage.json。
 async function loadYouTubeKey() {
   if (process.env.YOUTUBE_API_KEY?.trim()) return process.env.YOUTUBE_API_KEY.trim();
   try {
@@ -402,36 +404,20 @@ async function loadYouTubeKey() {
   return "";
 }
 
-const YT_QUOTA_CAP = Number(process.env.YT_QUOTA_CAP ?? 9000);
-const quotaPath = () => {
-  const d = new Date();
-  const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  return path.resolve(`logs/.yt-quota-${k}`);
-};
-let _quota = -1;
-async function quotaGet() {
-  if (_quota < 0) {
-    try { _quota = parseInt(await readFile(quotaPath(), "utf8"), 10) || 0; }
-    catch { _quota = 0; }
-  }
-  return _quota;
-}
-async function quotaAdd(n) {
-  _quota = (await quotaGet()) + n;
-  try {
-    await mkdir(path.dirname(quotaPath()), { recursive: true });
-    await writeFile(quotaPath(), String(_quota));
-  } catch {}
-  return _quota;
-}
-
-class QuotaExceeded extends Error {}
 class ApiFatal extends Error {}
 
 async function ytApi(key, endpoint, params) {
-  if ((await quotaGet()) >= YT_QUOTA_CAP) {
-    throw new QuotaExceeded(`配额已用尽（${await quotaGet()}/${YT_QUOTA_CAP}），明早自动恢复`);
+  // 发送前跨进程原子预留 1 单位；任何预留/写入错误都 fail closed 走页面抓取。
+  let quota;
+  try {
+    quota = await reserve({ cost: 1 });
+  } catch (e) {
+    throw new QuotaExceeded(`配额预留失败，fail closed: ${e0(e)}`);
   }
+  if (!quota.ok) {
+    throw new QuotaExceeded(`配额已用尽（${quota.used}/${quota.limit}），明早自动恢复`);
+  }
+
   const url = new URL(`https://www.googleapis.com/youtube/v3/${endpoint}`);
   url.searchParams.set("key", key);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
@@ -440,11 +426,11 @@ async function ytApi(key, endpoint, params) {
     signal: AbortSignal.timeout(30000),
   });
   const j = await res.json().catch(() => ({}));
-  await quotaAdd(1);
   if (!res.ok) {
     const reason = j?.error?.errors?.[0]?.reason ?? "";
     const msg = `YT API ${endpoint} ${res.status}: ${(j?.error?.message ?? "").slice(0, 120)}`;
-    if (res.status === 403 && /quotaExceeded|dailyLimitExceeded|rateLimitExceeded/i.test(reason + JSON.stringify(j))) {
+    if (res.status === 403 && /quotaExceeded|dailyLimitExceeded/i.test(reason + JSON.stringify(j))) {
+      await markBlocked().catch(() => {});
       throw new QuotaExceeded(`YouTube API 配额耗尽: ${reason}`);
     }
     if ([400, 401, 403].includes(res.status)) throw new ApiFatal(msg); // key/权限问题，回退抓取也救不了

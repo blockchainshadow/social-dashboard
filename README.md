@@ -24,7 +24,9 @@ YouTube 公开数据看板：订阅、播放、点赞趋势 + 分组/标签管�
 
 `scripts/fetch-youtube.mjs` 优先用 YouTube Data API 获取频道统计及最近 50 条视频的精确数据；频道页提供关键词、外链及视频列表，`all: true` 时继续翻页枚举普通视频和 Shorts。列表里其余视频按 50 个 ID 一批从 API 补齐播放、点赞、时间、时长等；API 未返回的视频沿用页面/watch/RSS 数据。页面抓取失败时仅保留 API 最近 50 条，API 不可用或达到脚本配额上限时回退页面采集；日志会提示降级。
 
-密钥从 `YOUTUBE_API_KEY` 或 `~/.config/social-dashboard/youtube-api-key` 读取，不需要 Google OAuth。默认 API 日额度为 10,000 units（太平洋时间午夜重置），本地 `YT_QUOTA_CAP` 默认 9000，按本机日期记账；`channels.list`、`playlistItems.list`、`videos.list` 每请求各 1 unit，全量频道的额外 `videos.list` 批次另计。官方来源与时区差异见 `docs/youtube-api-quota-research.md`。
+密钥从 `YOUTUBE_API_KEY` 或 `~/.config/social-dashboard/youtube-api-key` 读取，不需要 Google OAuth。YouTube Data API 默认每太平洋时间自然日 10,000 units；`channels.list`、`playlistItems.list`、`videos.list` 每请求各 1 unit，失败请求也计入。脚本在发送请求前通过 `logs/.yt-quota-YYYY-MM-DD` 和目录锁跨进程预留，`YT_QUOTA_CAP` 默认为 9000、最高 9000（留 1000 units 余量）；太平洋时间午夜重置。达到上限、Google 报配额耗尽、计数文件损坏或锁超时即停用 API，回退页面采集。异常退出留下的 `logs/.yt-quota-lock-YYYY-MM-DD` 不会自动抢锁：确认所有采集进程已退出后才能手动移除该锁，**不要**清空当天计数/阻断文件。官方来源见 `docs/youtube-api-quota-research.md`。
+
+顶栏 `YT API` 徽标展示当天本机已预留/上限及百分比，和 Cloudflare 用量同样按超过 80% 变黄、超过 90% 变红，暂停时直接变红；`bash scripts/publish-r2.sh` 更新并发布 `data/youtube-api-usage.json`（只有日期、计数、上限、暂停状态和更新时间，不含密钥）。此限制仅涵盖**本机运行此脚本**的请求：同一 Google Cloud 项目若有其它客户端或更低的实际配额，脚本无法代它们记账，须在 Google Cloud 控制台核对项目额度/其它用量并设置相应限制。
 
 ## 页面数据发布
 

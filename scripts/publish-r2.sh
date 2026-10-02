@@ -99,6 +99,12 @@ publish_plain() {
 publish_plain channels.json channels.json "application/json; charset=utf-8"
 publish_plain users.json users.json "application/json; charset=utf-8"
 publish_plain data/cf-usage.json data/cf-usage.json "application/json; charset=utf-8"
+if node scripts/youtube-quota.mjs --snapshot; then
+  publish_plain data/youtube-api-usage.json data/youtube-api-usage.json "application/json; charset=utf-8"
+else
+  echo "  YouTube 用量快照 FAIL，跳过发布"
+  OVERALL_FAIL=1
+fi
 
 # Dashboard：大历史拆成索引 + 按频道分片；source 字节未变且已有成功 state 时跳过 build/upload
 DASH_STATE="$STATE_DIR/dashboard-state.json"
