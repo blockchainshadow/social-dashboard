@@ -295,7 +295,9 @@
     "all": true,
     "tags": [
       "Lofi"
-    ]
+    ],
+    "alias": "",
+    "group": "Lofi"
   },
   {
     "platform": "youtube",
