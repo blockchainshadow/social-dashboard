@@ -749,7 +749,9 @@ $("add-btn").addEventListener("click", async () => {
 });
 
 // ---------- 备注名/分组编辑 ----------
-$("meta-editbtn").onclick = () => {
+$("menu-edit").onclick = $("meta-editbtn").onclick = () => {
+  $("manage-menu").classList.remove("open");
+  if (!currentKey) return;
   const info = channels[currentKey]?.info ?? {};
   $("edit-alias").value = info.alias ?? "";
   $("edit-group").value = info.group ?? "";
@@ -762,7 +764,8 @@ $("meta-cancel").onclick = () => {
   $("p-editbtn").style.display = apiOk ? "flex" : "none";
 };
 $("meta-save").onclick = async () => {
-  const [platform, ...rest] = currentKey.split(":");
+  const key = currentKey;
+  const [platform, ...rest] = key.split(":");
   const handle = rest.join(":");
   const tags = [...new Set($("edit-tags").value.split(/[,，、\s]+/).map((s) => s.trim()).filter(Boolean))].slice(0, 10);
   try {
@@ -771,8 +774,9 @@ $("meta-save").onclick = async () => {
       alert(`保存失败：${body.error ?? `HTTP ${status}`}`);
       return;
     }
-    const info = channels[currentKey].info ?? (channels[currentKey].info = {});
-    const j = body;
+    const j = body.channels?.find((c) => (c.platform ?? "youtube") === platform && c.handle === handle);
+    if (!j) throw new Error("服务端未返回当前账号的最新配置");
+    const info = channels[key].info ?? (channels[key].info = {});
     if (j.alias) info.alias = j.alias; else delete info.alias;
     if (j.group) info.group = j.group; else delete info.group;
     if (j.tags?.length) info.tags = j.tags; else delete info.tags;
