@@ -529,5 +529,17 @@
       "游戏",
       "Steam"
     ]
+  },
+  {
+    "platform": "youtube",
+    "handle": "@nivvyn",
+    "alias": "",
+    "group": "游戏",
+    "tags": [
+      "游戏",
+      "马来"
+    ],
+    "all": true,
+    "owner": "admin"
   }
 ]
