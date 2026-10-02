@@ -174,7 +174,12 @@
     "platform": "youtube",
     "handle": "@pixeqla",
     "owner": "xiong",
-    "all": true
+    "all": true,
+    "alias": "",
+    "group": "游戏",
+    "tags": [
+      "游戏制作"
+    ]
   },
   {
     "platform": "youtube",
@@ -204,7 +209,12 @@
     "platform": "youtube",
     "handle": "@Magicaroo",
     "owner": "xiong",
-    "all": true
+    "all": true,
+    "alias": "",
+    "group": "游戏",
+    "tags": [
+      "游戏"
+    ]
   },
   {
     "platform": "youtube",
@@ -246,7 +256,13 @@
     "platform": "youtube",
     "handle": "@yaoyao8866",
     "owner": "xiong",
-    "all": true
+    "all": true,
+    "alias": "",
+    "group": "短剧",
+    "tags": [
+      "短剧",
+      "起号"
+    ]
   },
   {
     "platform": "youtube",
