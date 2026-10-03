@@ -170,13 +170,12 @@ class DashboardClient {
     return this.channels().includes(key);
   }
   _allMode() {
-    try { return sessionStorage.getItem("dash-all") === "1"; }
+    try { return sessionStorage.getItem("dash-all") !== "0"; }
     catch { return false; }
   }
   setAllMode(on) {
     try {
-      if (on) sessionStorage.setItem("dash-all", "1");
-      else sessionStorage.removeItem("dash-all");
+      sessionStorage.setItem("dash-all", on ? "1" : "0");
     } catch {}
   }
 
@@ -301,7 +300,7 @@ export function renderPendingCard(job) {
   }[job.status] ?? job.status;
   const statusClass = job.status === "failed" ? "down" : (job.status === "complete" ? "green" : "amber");
   const errorHtml = job.error ? `<div style="color:var(--down);font-size:12px;margin-top:4px">${escHtml(String(job.error).slice(0, 200))}</div>` : "";
-  const kindText = job.kind === "initial" ? "首次采集" : job.kind === "full" ? "全量采集" : "刷新";
+  const kindText = job.kind === "initial" ? "首次采集" : job.kind === "full" ? "全量采集" : "更新现有频道";
   return `
     <div class="pending-card" data-job-id="${escHtml(job.id)}" style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 12px;min-width:180px;flex:1 1 180px;max-width:260px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">

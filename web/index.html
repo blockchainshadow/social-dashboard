@@ -428,7 +428,7 @@
 </div>
 
 <script type="module">
-import { client as dashClient, dataUrl, resolveUrl, renderPendingCard } from "../assets/dashboard-client.mjs?v=20261002-r2";
+import { client as dashClient, dataUrl, resolveUrl, renderPendingCard } from "../assets/dashboard-client.mjs?v=20261003-directory";
 const $ = (id) => document.getElementById(id);
 await dashClient.init();
 const AUTH = dashClient.user;
@@ -563,7 +563,7 @@ const channelKeys = Object.keys(channels);
 
 // ---------- 权限过滤（session 已验证，admin 全量，member 仅限授权频道） ----------
 // AUTH 来自已验证的 Worker 会话；公开数据对未登录用户可见
-const adminAll = () => !!AUTH && AUTH.role === "admin" && sessionStorage.getItem("dash-all") === "1";
+const adminAll = () => !!AUTH && AUTH.role === "admin" && sessionStorage.getItem("dash-all") !== "0";
 const authAllows = (key) =>
   !AUTH || adminAll() || AUTH.channels?.includes(key) || channels[key]?.info?.owner === AUTH.user;
 if (!channelKeys.length && indexError) {
@@ -656,13 +656,12 @@ if (AUTH && AUTH.role === "admin") {
   ab.style.display = "";
   const syncAllBtn = () => {
     const on = adminAll();
-    ab.textContent = on ? "🌍 全员·开" : "🌍 全员";
+    ab.textContent = on ? "🌍 全员" : "🌍 仅本人";
     ab.classList.toggle("active-all", on);
   };
   syncAllBtn();
   ab.onclick = () => {
-    if (adminAll()) sessionStorage.removeItem("dash-all");
-    else sessionStorage.setItem("dash-all", "1");
+    dashClient.setAllMode(!adminAll());
     location.reload();
   };
 }
@@ -826,13 +825,13 @@ $("refresh-btn").onclick = async () => {
   if (!currentKey) { btn.disabled = false; return; }
   const [platform, ...rest] = currentKey.split(":");
   const handle = rest.join(":");
-  setRefresh('<span class="ico">⟳</span> 抓取中…（约1-2分钟）', true);
+  setRefresh('<span class="ico">⟳</span> 提交刷新…', true);
   try {
     const { ok, status, body } = await dashClient.refreshChannel(platform, handle);
     if (!ok) {
       alert(`刷新失败：${body.error ?? `HTTP ${status}`}`);
     } else {
-      alert(`已加入队列：${body.job?.handle ?? handle}`);
+      alert(`已提交 ${body.job?.handle ?? handle} 的数据刷新任务。更新现有频道，不会新增账号；等待期间仍可切换其他频道。`);
     }
   } catch (e) {
     alert("请求失败：" + e.message);
