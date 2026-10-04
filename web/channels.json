@@ -541,5 +541,17 @@
     ],
     "all": true,
     "owner": "admin"
+  },
+  {
+    "platform": "youtube",
+    "handle": "@QuizBlitz_",
+    "alias": "",
+    "group": "儿童",
+    "tags": [
+      "儿童",
+      "quiz"
+    ],
+    "all": true,
+    "owner": "admin"
   }
 ]
