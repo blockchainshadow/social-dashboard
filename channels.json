@@ -553,5 +553,17 @@
     ],
     "all": true,
     "owner": "admin"
+  },
+  {
+    "platform": "youtube",
+    "handle": "@IlonaHerTruck",
+    "alias": "",
+    "group": "vlog",
+    "tags": [
+      "卡车",
+      "油管"
+    ],
+    "all": true,
+    "owner": "admin"
   }
 ]
