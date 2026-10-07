@@ -565,5 +565,18 @@
     ],
     "all": true,
     "owner": "admin"
+  },
+  {
+    "platform": "youtube",
+    "handle": "@steam991dailyy",
+    "alias": "",
+    "group": "游戏",
+    "tags": [
+      "游戏",
+      "资讯",
+      "起号"
+    ],
+    "all": true,
+    "owner": "admin"
   }
 ]
