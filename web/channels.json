@@ -590,5 +590,19 @@
     ],
     "all": true,
     "owner": "xiong"
+  },
+  {
+    "platform": "youtube",
+    "handle": "@mjenglish",
+    "alias": "",
+    "group": "教育",
+    "tags": [
+      "英语",
+      "学习",
+      "培训",
+      "教育"
+    ],
+    "all": true,
+    "owner": "xiong"
   }
 ]
