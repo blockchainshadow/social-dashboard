@@ -578,5 +578,17 @@
     ],
     "all": true,
     "owner": "admin"
+  },
+  {
+    "platform": "youtube",
+    "handle": "@hushwaveco",
+    "alias": "",
+    "group": "Lofi",
+    "tags": [
+      "Lofi",
+      "音乐"
+    ],
+    "all": true,
+    "owner": "xiong"
   }
 ]
