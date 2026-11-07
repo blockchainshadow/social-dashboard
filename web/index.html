@@ -1544,7 +1544,17 @@ function renderChannel(key) {
 function renderPending(jobs) {
   const section = $("pending-section");
   const list = $("pending-list");
-  const active = jobs.filter((j) => ["queued", "running", "collected", "publishing", "failed"].includes(j.status));
+  const jobKey = (job) => `${job.platform || "youtube"}:${job.handle}:${job.kind}`;
+  const completed = new Map();
+  for (const job of jobs) {
+    if (job.status !== "complete") continue;
+    const key = jobKey(job);
+    completed.set(key, Math.max(completed.get(key) ?? 0, job.id));
+  }
+  const active = jobs.filter((job) => {
+    if (job.status === "failed") return !(completed.get(jobKey(job)) > job.id);
+    return ["queued", "running", "collected", "publishing"].includes(job.status);
+  });
   if (!active.length) { section.style.display = "none"; list.innerHTML = ""; return; }
   section.style.display = "";
   list.innerHTML = active.map(renderPendingCard).join("");
