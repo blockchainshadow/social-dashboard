@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { openStore } from "../scripts/dashboard-store.mjs";
-import { runJobs, queueLocalJobs } from "../scripts/run-dashboard-jobs.mjs";
+import { runJobs, runOneJob, queueLocalJobs } from "../scripts/run-dashboard-jobs.mjs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -186,5 +186,82 @@ test("configuration deletion reaches the published index without a collection jo
     assert.equal(after.channels[HANDLE], undefined);
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("renamed handles keep the stored channel identity across collection kinds", async (t) => {
+  const originalCwd = process.cwd();
+  const originalKey = process.env.YOUTUBE_API_KEY;
+  const originalFetch = globalThis.fetch;
+  const channelId = result(1).profile.channelId;
+  const scenarios = [
+    { kind: "refresh", handleResult: "missing" },
+    { kind: "full", handleResult: "reassigned" },
+    { kind: "initial", handleResult: "missing" },
+    { kind: "initial", handleResult: "fresh", fresh: true },
+  ];
+  process.env.YOUTUBE_API_KEY = "isolated-test-key";
+  try {
+    for (const scenario of scenarios) {
+      await t.test(`${scenario.kind}: ${scenario.handleResult}`, async () => {
+        const root = await mkdtemp(path.join(tmpdir(), "runner-channel-id-"));
+        const store = openStore({ root });
+        process.chdir(root);
+        try {
+          store.reconcileConfig(CONFIG);
+          if (!scenario.fresh) store.saveChannel(result(1), CONFIG[0]);
+          const { id: jobId } = store.enqueue(HANDLE, scenario.kind, CONFIG[0]);
+          const job = store.claim();
+          assert.equal(job.id, jobId);
+          globalThis.fetch = async (input) => {
+            const url = new URL(input);
+            const params = url.searchParams;
+            let body;
+            if (url.pathname.endsWith("/channels")) {
+              const byId = params.get("id") === channelId;
+              const missing = !byId && scenario.handleResult === "missing";
+              const id = byId || scenario.fresh ? channelId : "UC" + "y".repeat(22);
+              body = { items: missing ? [] : [{
+                id, snippet: { title: "Renamed channel" },
+                statistics: { subscriberCount: "7", viewCount: "25", videoCount: "2" },
+                contentDetails: { relatedPlaylists: { uploads: "uploads" } },
+              }] };
+            } else if (url.pathname.endsWith("/playlistItems")) {
+              body = { items: [{ contentDetails: { videoId: "new-video" } }] };
+            } else if (url.pathname.endsWith("/videos")) {
+              body = { items: params.get("id").split(",").map((id) => ({
+                id, snippet: { title: id }, statistics: { viewCount: "15" },
+                contentDetails: { duration: "PT1M" },
+              })) };
+            } else {
+              throw new Error(`Unexpected request: ${url.origin}${url.pathname}`);
+            }
+            return new Response(JSON.stringify(body), {
+              headers: { "content-type": "application/json" },
+            });
+          };
+          await runOneJob(store, job, new Map([[HANDLE, CONFIG[0]]]));
+          const saved = store.getChannel(HANDLE);
+          assert.equal(saved.info.channelId, channelId);
+          assert.equal(saved.info.owner, "alice");
+          assert.equal(saved.info.name, "Renamed channel");
+          const latest = saved.records.at(-1);
+          assert.equal(latest.videos["new-video"].views, 15);
+          if (!scenario.fresh) {
+            assert.equal(latest.videos["video-0"].views, 15);
+            assert.equal(saved.records[0].videos["video-0"].views, 10);
+          }
+          assert.equal(store.jobs(HANDLE).find((entry) => entry.id === jobId).status, "collected");
+        } finally {
+          store.close();
+          process.chdir(originalCwd);
+          await rm(root, { recursive: true, force: true });
+        }
+      });
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.YOUTUBE_API_KEY;
+    else process.env.YOUTUBE_API_KEY = originalKey;
   }
 });

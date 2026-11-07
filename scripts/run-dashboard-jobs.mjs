@@ -44,11 +44,14 @@ function configuredEntry(store, config, handle) {
 }
 
 
-function knownVideoIdsAndPrior(store, handle) {
+function priorChannelState(store, handle) {
   const ch = store.getChannel(handle);
-  if (!ch?.records?.length) return { knownVideoIds: [], priorVideos: {} };
-  const latest = ch.records[ch.records.length - 1];
-  return { knownVideoIds: Object.keys(latest.videos ?? {}), priorVideos: latest.videos ?? {} };
+  const latest = ch?.records?.at(-1);
+  return {
+    channelId: ch?.info?.channelId ?? null,
+    knownVideoIds: Object.keys(latest?.videos ?? {}),
+    priorVideos: latest?.videos ?? {},
+  };
 }
 
 async function saveWithAvatar(store, result, meta = {}) {
@@ -115,16 +118,16 @@ export async function runOneJob(store, job, config, collectors = DEFAULT_COLLECT
   });
   try {
     let result;
+    const prior = priorChannelState(store, handle);
     if (kind === "initial") {
-      result = await collectors.initial(entry, { onProgress });
+      result = await collectors.initial(entry, { ...prior, onProgress });
     } else if (kind === "full") {
-      const prior = knownVideoIdsAndPrior(store, handle);
       result = entry.all === false
         ? await collectors.refresh(entry, { ...prior, onProgress })
         : await collectors.full(entry, { ...prior, onProgress });
     } else if (kind === "refresh") {
       result = await collectors.refresh(entry, {
-        ...knownVideoIdsAndPrior(store, handle), onProgress,
+        ...prior, onProgress,
       });
     } else {
       throw new Error(`unknown job kind ${kind}`);

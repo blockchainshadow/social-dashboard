@@ -534,13 +534,14 @@ async function fetchChannelByAPI(key, handle) {
   return { profile, about, subscribers, uploadsId: c.contentDetails?.relatedPlaylists?.uploads };
 }
 
-export async function syncChannelViaAPI(item, { kind = "refresh", knownVideoIds = [], priorVideos = {}, onProgress = () => {} } = {}) {
+export async function syncChannelViaAPI(item, { kind = "refresh", channelId = null, knownVideoIds = [], priorVideos = {}, onProgress = () => {} } = {}) {
   const key = await loadYouTubeKey();
   if (!key) throw new Error("未配置 YOUTUBE_API_KEY");
   const handle = typeof item === "string" ? item : item.handle;
   console.log(`\n== ${handle}（API ${kind}） ==`);
 
-  const { profile, about, subscribers, uploadsId } = await fetchChannelByAPI(key, handle);
+  // Handles can change or be reassigned; a stored channel ID remains authoritative.
+  const { profile, about, subscribers, uploadsId } = await fetchChannelByAPI(key, channelId || handle);
   if (!uploadsId && about.videoCountTotal > 0) {
     throw new Error(`channel ${handle} reports uploads but API returned no uploads playlist`);
   }
@@ -635,7 +636,7 @@ export async function syncChannel(item, opts = {}) {
   const key = await loadYouTubeKey();
   if (key) {
     try {
-      return await syncChannelViaAPI(item, { kind: opts.kind ?? "refresh", knownVideoIds: opts.knownVideoIds ?? [] });
+      return await syncChannelViaAPI(item, { ...opts, kind: opts.kind ?? "refresh" });
     } catch (e) {
       if (e instanceof QuotaExceeded || e instanceof ApiFatal) {
         console.warn(`  ! API 不可用，改用页面抓取: ${e0(e)}`);
